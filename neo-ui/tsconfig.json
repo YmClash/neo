@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"],
+      "@popup/*": ["src/popup/*"],
+      "@dashboard/*": ["src/dashboard/*"],
+      "@themes/*": ["src/themes/*"],
+      "@wasm/*": ["src/wasm/*"]
+    },
+    "types": ["chrome"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

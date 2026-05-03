@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Neo — Advanced Monitoring & Control",
+  "version": "0.1.0",
+  "description": "Monitoring multidimensionnel et contrôle avancé, propulsé par WASM. Inspiré du génie de Vegapunk.",
+
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications",
+    "tabs",
+    "activeTab",
+    "nativeMessaging",
+    "scripting"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "dist/service-worker.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_icon": {
+      "16": "neo-assets/icons/icon-16.png",
+      "32": "neo-assets/icons/icon-32.png",
+      "48": "neo-assets/icons/icon-48.png",
+      "128": "neo-assets/icons/icon-128.png"
+    },
+    "default_title": "Neo — Control Panel"
+  },
+
+  "icons": {
+    "16": "neo-assets/icons/icon-16.png",
+    "32": "neo-assets/icons/icon-32.png",
+    "48": "neo-assets/icons/icon-48.png",
+    "128": "neo-assets/icons/icon-128.png"
+  },
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["dist/neo_core_bg.wasm", "dist/assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "options_page": "dist/dashboard.html",
+
+  "minimum_chrome_version": "110"
+}

@@ -1,0 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Neo — Theme: Matrix
+   🟢 Green terminal / Black — Classic hacker aesthetic
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="matrix"] {
+  /* Background layers */
+  --neo-bg:           #0a0a0a;
+  --neo-bg-alt:       #0d1a0d;
+  --neo-surface:      #1a2e1a;
+
+  /* Borders */
+  --neo-border:       #1e3d1e;
+
+  /* Text */
+  --neo-text:         #b8e6b8;
+  --neo-text-dim:     #5a8a5a;
+
+  /* Accent — Phosphor Green */
+  --neo-accent:       #00ff41;
+  --neo-accent-hover: #33ff66;
+
+  /* Status */
+  --neo-success:      #00ff41;
+  --neo-warning:      #ffff00;
+  --neo-danger:       #ff3333;
+  --neo-info:         #00ccff;
+
+  /* Effects */
+  --neo-glow:         rgba(0, 255, 65, 0.4);
+}

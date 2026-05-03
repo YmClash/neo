@@ -1,0 +1,173 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Neo — Base Theme Variables
+   Common design tokens inherited by all themes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Default Theme: Egghead ─────────────────────────────────────────────── */
+:root {
+  /* Background layers */
+  --neo-bg:           #0a0e1a;
+  --neo-bg-alt:       #111827;
+  --neo-surface:      #1e2642;
+
+  /* Borders */
+  --neo-border:       #2d3a5c;
+
+  /* Text */
+  --neo-text:         #e2e8f0;
+  --neo-text-dim:     #8892b0;
+
+  /* Accent — Indigo/Violet */
+  --neo-accent:       #6366f1;
+  --neo-accent-hover: #818cf8;
+
+  /* Status */
+  --neo-success:      #34d399;
+  --neo-warning:      #fbbf24;
+  --neo-danger:       #f87171;
+  --neo-info:         #60a5fa;
+
+  /* Effects */
+  --neo-glow:         rgba(99, 102, 241, 0.4);
+
+  /* Typography */
+  --neo-font-sans:    'Inter', system-ui, sans-serif;
+  --neo-font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+  --neo-font-display: 'Outfit', 'Inter', system-ui, sans-serif;
+
+  /* Transitions */
+  --neo-transition:   all 0.2s ease;
+  --neo-transition-slow: all 0.4s ease;
+}
+
+/* ─── Global Base Styles ─────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--neo-font-sans);
+    background-color: var(--neo-bg);
+    color: var(--neo-text);
+    line-height: 1.6;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--neo-bg);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--neo-border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--neo-accent);
+  }
+
+  /* Selection styling */
+  ::selection {
+    background: var(--neo-accent);
+    color: #ffffff;
+  }
+}
+
+/* ─── Utility Classes ────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Glassmorphism card */
+  .neo-glass {
+    background: rgba(30, 38, 66, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--neo-border);
+    border-radius: 0.75rem;
+  }
+
+  /* Glowing border effect */
+  .neo-glow-border {
+    border: 1px solid var(--neo-accent);
+    box-shadow: 0 0 10px var(--neo-glow), inset 0 0 10px rgba(99, 102, 241, 0.05);
+  }
+
+  /* Status indicator dot */
+  .neo-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .neo-status-dot.online {
+    background: var(--neo-success);
+    box-shadow: 0 0 6px var(--neo-success);
+  }
+
+  .neo-status-dot.offline {
+    background: var(--neo-danger);
+    box-shadow: 0 0 6px var(--neo-danger);
+  }
+
+  .neo-status-dot.idle {
+    background: var(--neo-warning);
+    box-shadow: 0 0 6px var(--neo-warning);
+  }
+
+  /* Scan line effect overlay */
+  .neo-scanline::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--neo-accent),
+      transparent
+    );
+    animation: scanLine 4s linear infinite;
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
+  /* Gradient text */
+  .neo-gradient-text {
+    background: linear-gradient(135deg, var(--neo-accent), var(--neo-accent-hover));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Data grid pattern background */
+  .neo-grid-bg {
+    background-image:
+      linear-gradient(var(--neo-border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--neo-border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: center center;
+  }
+}
