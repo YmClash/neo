@@ -1,0 +1,36 @@
+# ─── Dependencies ───
+node_modules/
+neo-ui/node_modules/
+neo-bridge/node_modules/
+
+# ─── Build Artifacts & Output ───
+dist/
+neo-ui/dist/
+neo-bridge/dist/
+
+# ─── Rust & WASM ───
+neo-core/target/
+neo-core/pkg/
+neo-ui/src/wasm/
+
+# ─── Environment & Secrets ───
+.env
+.env.local
+.env.*.local
+
+# ─── Logs & Caches ───
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+.vite/
+
+# ─── OS & Editor ───
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Note: Do not ignore package-lock.json or Cargo.lock

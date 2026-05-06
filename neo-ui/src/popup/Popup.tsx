@@ -1,16 +1,17 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, Badge, ThemeSwitcher } from '@shared/components';
+import { Badge, ThemeSwitcher } from '@shared/components';
 import { useModules, useWasm } from '@shared/hooks';
 import { ModuleToggle } from './components/ModuleToggle';
 import { QuickStats } from './components/QuickStats';
 import { StatusBar } from './components/StatusBar';
+import { FocusTimerWidget } from '@shared/components';
 
 // ─── Neo Popup ────────────────────────────────────────────────────────────────
 // The control panel that opens when clicking the extension icon.
 
 export const Popup: React.FC = () => {
-  const { modules, activeModules, toggleModule, loading: modulesLoading } = useModules();
+  const { modules, activeModules, toggleModule } = useModules();
   const { ready: wasmReady, loading: wasmLoading } = useWasm();
 
   // Apply stored theme on mount
@@ -22,7 +23,7 @@ export const Popup: React.FC = () => {
   }, []);
 
   const openDashboard = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('dist/dashboard.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL('dist/src/dashboard/dashboard.html') });
   };
 
   return (
@@ -62,9 +63,10 @@ export const Popup: React.FC = () => {
         totalCount={modules.length}
       />
 
-      {/* ─── Quick Stats ─────────────────────────────────────────── */}
-      <div className="px-4 py-3">
+      {/* ─── Quick Stats & Focus ───────────────────────────────────── */}
+      <div className="px-4 py-3 space-y-3">
         <QuickStats />
+        <FocusTimerWidget compact />
       </div>
 
       {/* ─── Modules ─────────────────────────────────────────────── */}

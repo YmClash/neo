@@ -15,7 +15,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   wasmReady,
   wasmLoading,
   activeCount,
-  totalCount,
+  totalCount: _totalCount,
 }) => {
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-neo-bg-alt border-b border-neo-border">

@@ -176,6 +176,47 @@ async function handleMessage(
       }
     }
 
+    // ─── Focus Timer ──────────────────────────────────────────
+    case 'FOCUS_START': {
+      const { minutes } = message.payload as { minutes: number };
+      const sessionId = Date.now().toString(); // Use timestamp as session ID
+      import('./alarms').then(({ createFocusAlarm }) => {
+        createFocusAlarm(sessionId, minutes);
+      });
+      return {
+        success: true,
+        data: { sessionId, minutes },
+        timestamp: Date.now(),
+      };
+    }
+
+    case 'FOCUS_STOP': {
+      // Clear all focus alarms
+      chrome.alarms.getAll((alarms) => {
+        alarms.forEach(alarm => {
+          if (alarm.name.startsWith('neo-focus-')) {
+            chrome.alarms.clear(alarm.name);
+          }
+        });
+      });
+      return {
+        success: true,
+        timestamp: Date.now(),
+      };
+    }
+
+    // ─── Web Probes ───────────────────────────────────────────
+    case 'PROBE_COMPLETE': {
+      const { url, itemCount } = message.payload as { url: string, itemCount: number };
+      import('./notifications').then(({ notifyProbeResult }) => {
+        notifyProbeResult(url, itemCount);
+      });
+      return {
+        success: true,
+        timestamp: Date.now(),
+      };
+    }
+
     // ─── Default ──────────────────────────────────────────────
     default:
       return {

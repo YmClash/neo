@@ -3,7 +3,7 @@ import { motion, type HTMLMotionProps } from 'framer-motion';
 
 // ─── Button Component ─────────────────────────────────────────────────────────
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
@@ -19,6 +19,8 @@ const variantStyles: Record<ButtonVariant, string> = {
     'bg-neo-accent text-white hover:bg-neo-accent-hover shadow-lg shadow-neo-accent/20',
   secondary:
     'bg-neo-surface text-neo-text border border-neo-border hover:border-neo-accent hover:text-neo-accent',
+  outline:
+    'bg-transparent text-neo-text border border-neo-border hover:border-neo-accent hover:text-neo-accent',
   ghost:
     'bg-transparent text-neo-text-dim hover:text-neo-text hover:bg-neo-surface',
   danger:

@@ -1,13 +1,38 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { copyFileSync, mkdirSync, existsSync } from 'fs';
 
 // ─── Vite Configuration for Neo Chrome Extension ──────────────────────────────
 // Multi-entry build: popup + dashboard
 // WASM support via wasm-unsafe-eval CSP
+// CRITICAL: Chrome extensions need relative paths (no leading /)
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Post-build: copy HTML files to dist root for flat structure
+    {
+      name: 'neo-flatten-html',
+      closeBundle() {
+        const distDir = resolve(__dirname, '../dist');
+        const srcPopup = resolve(distDir, 'src/popup/popup.html');
+        const srcDash = resolve(distDir, 'src/dashboard/dashboard.html');
+
+        if (existsSync(srcPopup)) {
+          copyFileSync(srcPopup, resolve(distDir, 'popup.html'));
+          console.log('[Neo] Copied popup.html to dist root');
+        }
+        if (existsSync(srcDash)) {
+          copyFileSync(srcDash, resolve(distDir, 'dashboard.html'));
+          console.log('[Neo] Copied dashboard.html to dist root');
+        }
+      },
+    },
+  ],
+
+  // CRITICAL for Chrome extensions: use relative paths
+  base: '',
 
   resolve: {
     alias: {
@@ -35,7 +60,7 @@ export default defineConfig({
     },
     // Chrome extensions must have all code bundled
     target: 'esnext',
-    minify: 'terser',
+    minify: 'esbuild',
     sourcemap: process.env.NODE_ENV === 'development',
   },
 

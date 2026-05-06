@@ -1,0 +1,36 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useState } from 'react';
+import { Card, Badge, Button } from '@shared/components';
+import { useProbes } from '@shared/hooks';
+import { motion, AnimatePresence } from 'framer-motion';
+export const WebProbeView = () => {
+    const { results, loading, isProbing, executeProbe, clearResults } = useProbes();
+    const [config, setConfig] = useState({
+        selectors: { 'heading': 'h1' },
+        extract_text: false,
+        extract_links: true,
+        extract_images: false,
+    });
+    const [selectorKey, setSelectorKey] = useState('heading');
+    const [selectorValue, setSelectorValue] = useState('h1');
+    const handleAddSelector = () => {
+        if (selectorKey && selectorValue) {
+            setConfig({
+                ...config,
+                selectors: { ...config.selectors, [selectorKey]: selectorValue }
+            });
+            setSelectorKey('');
+            setSelectorValue('');
+        }
+    };
+    const handleRemoveSelector = (key) => {
+        const newSelectors = { ...config.selectors };
+        delete newSelectors[key];
+        setConfig({ ...config, selectors: newSelectors });
+    };
+    const handleRunProbe = () => {
+        executeProbe(config);
+    };
+    return (_jsxs(Card, { variant: "glass", padding: "md", children: [_jsxs("div", { className: "flex items-center justify-between mb-4", children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "text-xl", children: "\uD83D\uDD77\uFE0F" }), _jsx("h3", { className: "text-sm font-mono text-neo-text-dim tracking-wider", children: "WEB PROBES" })] }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx(Badge, { variant: isProbing ? 'warning' : 'default', dot: true, pulse: isProbing, size: "sm", children: isProbing ? 'SCANNING ACTIVE TAB' : `${results.length} SAVED` }), _jsx(Button, { variant: "danger", size: "sm", onClick: clearResults, disabled: results.length === 0, children: "Clear" })] })] }), _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6", children: [_jsxs("div", { className: "md:col-span-1 bg-neo-bg-alt/50 border border-neo-border rounded-neo p-4", children: [_jsx("h4", { className: "text-xs font-mono text-neo-text-dim mb-3", children: "PROBE CONFIGURATION" }), _jsxs("div", { className: "space-y-3 mb-4", children: [_jsxs("label", { className: "flex items-center gap-2 text-xs text-neo-text cursor-pointer", children: [_jsx("input", { type: "checkbox", className: "accent-neo-accent", checked: config.extract_links, onChange: (e) => setConfig({ ...config, extract_links: e.target.checked }) }), "Extract All Links"] }), _jsxs("label", { className: "flex items-center gap-2 text-xs text-neo-text cursor-pointer", children: [_jsx("input", { type: "checkbox", className: "accent-neo-accent", checked: config.extract_images, onChange: (e) => setConfig({ ...config, extract_images: e.target.checked }) }), "Extract Image Sources"] }), _jsxs("label", { className: "flex items-center gap-2 text-xs text-neo-text cursor-pointer", children: [_jsx("input", { type: "checkbox", className: "accent-neo-accent", checked: config.extract_text, onChange: (e) => setConfig({ ...config, extract_text: e.target.checked }) }), "Extract Body Text"] })] }), _jsx("div", { className: "h-px bg-neo-border mb-3" }), _jsx("h4", { className: "text-xs font-mono text-neo-text-dim mb-2", children: "CSS SELECTORS" }), _jsx("div", { className: "space-y-2 mb-3", children: Object.entries(config.selectors).map(([k, v]) => (_jsxs("div", { className: "flex items-center justify-between bg-neo-bg p-1.5 rounded border border-neo-border text-[10px] font-mono", children: [_jsxs("span", { className: "text-neo-text truncate", children: [k, ": ", _jsx("span", { className: "text-neo-accent", children: v })] }), _jsx("button", { onClick: () => handleRemoveSelector(k), className: "text-neo-danger hover:text-red-400 px-1", children: "\u2715" })] }, k))) }), _jsxs("div", { className: "flex flex-col gap-2 mb-4", children: [_jsx("input", { type: "text", placeholder: "Key (e.g. title)", value: selectorKey, onChange: (e) => setSelectorKey(e.target.value), className: "bg-neo-bg border border-neo-border rounded px-2 py-1 text-xs text-neo-text focus:outline-none" }), _jsxs("div", { className: "flex gap-2", children: [_jsx("input", { type: "text", placeholder: "Selector (e.g. h1)", value: selectorValue, onChange: (e) => setSelectorValue(e.target.value), className: "flex-1 bg-neo-bg border border-neo-border rounded px-2 py-1 text-xs text-neo-text focus:outline-none" }), _jsx(Button, { variant: "outline", size: "sm", onClick: handleAddSelector, children: "+" })] })] }), _jsx(Button, { variant: "primary", className: "w-full", onClick: handleRunProbe, disabled: isProbing, children: isProbing ? 'PROBING...' : 'RUN ON ACTIVE TAB' })] }), _jsx("div", { className: "md:col-span-2 overflow-hidden rounded-neo border border-neo-border bg-neo-bg/50 flex flex-col", children: loading ? (_jsx("div", { className: "p-8 text-center text-xs font-mono text-neo-text-dim animate-pulse", children: "LOADING HISTORY..." })) : results.length === 0 ? (_jsxs("div", { className: "flex-1 flex flex-col items-center justify-center p-8 text-center", children: [_jsx("div", { className: "text-4xl mb-3 opacity-30", children: "\uD83D\uDD78\uFE0F" }), _jsx("p", { className: "text-sm text-neo-text-dim mb-1", children: "No extraction history" }), _jsx("p", { className: "text-[10px] font-mono text-neo-text-dim opacity-60", children: "Run a probe to start collecting data from web pages." })] })) : (_jsx("div", { className: "flex-1 overflow-auto custom-scrollbar", children: _jsxs("table", { className: "w-full text-xs text-left", children: [_jsx("thead", { className: "sticky top-0 bg-neo-bg-alt border-b border-neo-border shadow-md z-10", children: _jsxs("tr", { children: [_jsx("th", { className: "px-4 py-2 font-mono text-neo-text-dim font-medium", children: "Time" }), _jsx("th", { className: "px-4 py-2 font-mono text-neo-text-dim font-medium", children: "Page" }), _jsx("th", { className: "px-4 py-2 font-mono text-neo-text-dim font-medium", children: "Status" }), _jsx("th", { className: "px-4 py-2 font-mono text-neo-text-dim font-medium", children: "Data Items" })] }) }), _jsx("tbody", { className: "divide-y divide-neo-border/50", children: _jsx(AnimatePresence, { children: results.map((res) => (_jsxs(motion.tr, { initial: { opacity: 0, backgroundColor: 'rgba(99, 102, 241, 0.2)' }, animate: { opacity: 1, backgroundColor: 'transparent' }, className: "hover:bg-neo-bg-alt/30 transition-colors", children: [_jsx("td", { className: "px-4 py-3 font-mono text-[10px] text-neo-text-dim whitespace-nowrap", children: new Date(res.timestamp).toLocaleTimeString() }), _jsx("td", { className: "px-4 py-3 max-w-[200px] truncate text-neo-text", title: res.title || res.url, children: res.title || res.url }), _jsx("td", { className: "px-4 py-3", children: _jsx(Badge, { variant: res.success ? 'success' : 'danger', size: "sm", children: res.success ? 'OK' : 'ERR' }) }), _jsxs("td", { className: "px-4 py-3 font-mono text-neo-accent", children: [res.success ? Object.keys(res.data).length : '-', " items"] })] }, res.id))) }) })] }) })) })] })] }));
+};
+//# sourceMappingURL=WebProbeView.js.map

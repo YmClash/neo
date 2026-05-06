@@ -1,5 +1,6 @@
 // ─── Neo Alarm Manager ────────────────────────────────────────────────────────
 // Chrome Alarms for periodic tasks: monitoring, focus timer, tech watch.
+import { notifyFocusComplete } from './notifications';
 
 const ALARMS = {
   HEARTBEAT: 'neo-heartbeat',          // 1 min — keep-alive & status check
@@ -93,9 +94,29 @@ async function handleTechWatch(): Promise<void> {
   // TODO: Phase 4 — Fetch tech news from configured sources
 }
 
+
 function handleFocusAlarm(alarmName: string): void {
   console.log(`[Neo Alarms] ⏱️ Focus alarm: ${alarmName}`);
-  // TODO: Phase 2 — Handle focus timer notifications
+  
+  // Extract session ID (e.g., "neo-focus-123456789")
+  const sessionId = alarmName.replace('neo-focus-', '');
+  
+  // Notify user
+  notifyFocusComplete(`Session ${sessionId.slice(-4)}`, 25); // We can pass dynamic duration if stored
+  
+  // Reset focus state in storage
+  chrome.storage.local.get('neo_focus_state', (result) => {
+    if (result.neo_focus_state && result.neo_focus_state.isActive) {
+      chrome.storage.local.set({
+        neo_focus_state: {
+          ...result.neo_focus_state,
+          isActive: false,
+          startTime: null,
+          endTime: null,
+        }
+      });
+    }
+  });
 }
 
 // ─── Focus Timer Alarm Helpers ────────────────────────────────────────────────

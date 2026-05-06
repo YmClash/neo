@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Card, Badge, ThemeSwitcher } from '@shared/components';
+import { Badge, ThemeSwitcher, FocusTimerWidget } from '@shared/components';
 import { useModules, useWasm } from '@shared/hooks';
 import { MetricsChart } from './components/MetricsChart';
 import { ModulePanel } from './components/ModulePanel';
@@ -71,16 +71,28 @@ export const Dashboard: React.FC = () => {
 
       {/* ─── Main Content ──────────────────────────────────────── */}
       <main className="max-w-7xl mx-auto px-6 py-6">
-        {/* ─── Top Row: Metrics Overview ─────────────────────── */}
-        <section className="mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs font-mono text-neo-text-dim tracking-widest">
-              ◈ METRICS OVERVIEW
-            </span>
-            <div className="flex-1 h-px bg-neo-border" />
-          </div>
-          <MetricsChart />
-        </section>
+        {/* ─── Top Row: Metrics & Focus ──────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          <section className="lg:col-span-2">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-mono text-neo-text-dim tracking-widest">
+                ◈ METRICS OVERVIEW
+              </span>
+              <div className="flex-1 h-px bg-neo-border" />
+            </div>
+            <MetricsChart />
+          </section>
+
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-mono text-neo-text-dim tracking-widest">
+                ◈ FOCUS TIMER
+              </span>
+              <div className="flex-1 h-px bg-neo-border" />
+            </div>
+            <FocusTimerWidget />
+          </section>
+        </div>
 
         {/* ─── Middle Row: Modules + Tasks ────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

@@ -20,7 +20,7 @@ export function showNotification(
   priority: NotificationPriority = 'normal',
   buttons?: chrome.notifications.ButtonOptions[]
 ): void {
-  const options: chrome.notifications.NotificationOptions = {
+  const options: chrome.notifications.NotificationOptions<true> = {
     type: 'basic',
     iconUrl: chrome.runtime.getURL('neo-assets/icons/icon-128.png'),
     title: `[Neo] ${title}`,
