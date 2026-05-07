@@ -12,14 +12,7 @@ const dist = resolve(root, 'dist');
 // Ensure dist exists
 if (!existsSync(dist)) mkdirSync(dist, { recursive: true });
 
-// Copy manifest.json
-cpSync(resolve(root, 'manifest.json'), resolve(dist, '../manifest.json'), { force: true });
-
-// Copy assets
-const assetsSource = resolve(root, 'neo-assets');
-const assetsDest = resolve(root, 'neo-assets'); // Already at root level
-if (existsSync(assetsSource)) {
-  console.log('[Post-Build] Assets already in place.');
-}
-
+// Extension is loaded directly from the neo/ root folder, 
+// so we don't need to copy manifest.json or assets into dist/.
+// The manifest.json paths already point to dist/ files.
 console.log('[Post-Build] ✓ Extension packaging complete.');

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 
 // ─── Vite Configuration for Neo Chrome Extension ──────────────────────────────
 // Multi-entry build: popup + dashboard
@@ -11,7 +11,7 @@ import { copyFileSync, mkdirSync, existsSync } from 'fs';
 export default defineConfig({
   plugins: [
     react(),
-    // Post-build: copy HTML files to dist root for flat structure
+    // Post-build: copy HTML files to dist root and fix paths
     {
       name: 'neo-flatten-html',
       closeBundle() {
@@ -20,12 +20,16 @@ export default defineConfig({
         const srcDash = resolve(distDir, 'src/dashboard/dashboard.html');
 
         if (existsSync(srcPopup)) {
-          copyFileSync(srcPopup, resolve(distDir, 'popup.html'));
-          console.log('[Neo] Copied popup.html to dist root');
+          let content = readFileSync(srcPopup, 'utf-8');
+          content = content.replace(/\.\.\/\.\.\//g, './');
+          writeFileSync(resolve(distDir, 'popup.html'), content);
+          console.log('[Neo] Copied and fixed popup.html to dist root');
         }
         if (existsSync(srcDash)) {
-          copyFileSync(srcDash, resolve(distDir, 'dashboard.html'));
-          console.log('[Neo] Copied dashboard.html to dist root');
+          let content = readFileSync(srcDash, 'utf-8');
+          content = content.replace(/\.\.\/\.\.\//g, './');
+          writeFileSync(resolve(distDir, 'dashboard.html'), content);
+          console.log('[Neo] Copied and fixed dashboard.html to dist root');
         }
       },
     },
