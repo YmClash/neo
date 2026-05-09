@@ -33,4 +33,8 @@ Thumbs.db
 *.swp
 *.swo
 
+# Personal Notes
+CODEX_BOARD.md
+
+
 # Note: Do not ignore package-lock.json or Cargo.lock

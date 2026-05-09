@@ -28,17 +28,38 @@ export function useProbes() {
         setIsProbing(true);
         try {
             // Get the active tab in the current window
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             if (tabs.length === 0 || !tabs[0].id) {
                 throw new Error('No active tab found.');
             }
-            const activeTab = tabs[0];
-            // Inject content script if not already there (Manifest V3 approach)
-            // Usually it's declared in manifest, but we can ensure it runs via messaging
+            let activeTab = tabs[0];
+            // If the user runs this from the Dashboard, the active tab IS the dashboard (chrome-extension://)
+            if (!activeTab.url || activeTab.url.startsWith('chrome://') || activeTab.url.startsWith('edge://') || activeTab.url.startsWith('chrome-extension://')) {
+                const allTabs = await chrome.tabs.query({ currentWindow: true });
+                const validTabs = allTabs.filter(t => t.url && (t.url.startsWith('http://') || t.url.startsWith('https://')));
+                if (validTabs.length === 0) {
+                    throw new Error('No standard website found to probe. Please open a web page (http/https) in another tab.');
+                }
+                // Smart fallback: pick the valid tab closest to the dashboard's index
+                activeTab = validTabs.reduce((prev, curr) => {
+                    return Math.abs(curr.index - activeTab.index) < Math.abs(prev.index - activeTab.index) ? curr : prev;
+                });
+            }
+            // Ensure the content script is injected
+            try {
+                await chrome.scripting.executeScript({
+                    target: { tabId: activeTab.id },
+                    files: ['dist/content-script.js']
+                });
+            }
+            catch (injectionError) {
+                // Might fail if already injected or due to permissions, we continue and try sendMessage anyway
+                console.warn('[Neo Probe] Injection warning:', injectionError);
+            }
             const response = await new Promise((resolve, reject) => {
                 chrome.tabs.sendMessage(activeTab.id, { type: 'PROBE_EXECUTE', payload: config }, (res) => {
                     if (chrome.runtime.lastError) {
-                        reject(new Error(chrome.runtime.lastError.message));
+                        reject(new Error("Cannot connect to page. Try refreshing the tab. (" + chrome.runtime.lastError.message + ")"));
                     }
                     else {
                         resolve(res);

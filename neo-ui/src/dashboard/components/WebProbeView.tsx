@@ -15,6 +15,7 @@ export const WebProbeView: React.FC = () => {
 
   const [selectorKey, setSelectorKey] = useState('heading');
   const [selectorValue, setSelectorValue] = useState('h1');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handleAddSelector = () => {
     if (selectorKey && selectorValue) {
@@ -161,27 +162,41 @@ export const WebProbeView: React.FC = () => {
                 <tbody className="divide-y divide-neo-border/50">
                   <AnimatePresence>
                     {results.map((res) => (
-                      <motion.tr 
-                        key={res.id}
-                        initial={{ opacity: 0, backgroundColor: 'rgba(99, 102, 241, 0.2)' }}
-                        animate={{ opacity: 1, backgroundColor: 'transparent' }}
-                        className="hover:bg-neo-bg-alt/30 transition-colors"
-                      >
-                        <td className="px-4 py-3 font-mono text-[10px] text-neo-text-dim whitespace-nowrap">
-                          {new Date(res.timestamp).toLocaleTimeString()}
-                        </td>
-                        <td className="px-4 py-3 max-w-[200px] truncate text-neo-text" title={res.title || res.url}>
-                          {res.title || res.url}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant={res.success ? 'success' : 'danger'} size="sm">
-                            {res.success ? 'OK' : 'ERR'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-neo-accent">
-                          {res.success ? Object.keys(res.data).length : '-'} items
-                        </td>
-                      </motion.tr>
+                      <React.Fragment key={res.id}>
+                        <motion.tr 
+                          initial={{ opacity: 0, backgroundColor: 'rgba(99, 102, 241, 0.2)' }}
+                          animate={{ opacity: 1, backgroundColor: 'transparent' }}
+                          className="hover:bg-neo-bg-alt/30 transition-colors cursor-pointer"
+                          onClick={() => setExpandedId(expandedId === res.id ? null : res.id)}
+                        >
+                          <td className="px-4 py-3 font-mono text-[10px] text-neo-text-dim whitespace-nowrap">
+                            {new Date(res.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td className="px-4 py-3 max-w-[200px] truncate text-neo-text" title={res.title || res.url}>
+                            {res.title || res.url}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div title={res.error || ''}>
+                              <Badge variant={res.success ? 'success' : 'danger'} size="sm">
+                                {res.success ? 'OK' : 'ERR'}
+                              </Badge>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-neo-accent flex items-center justify-between">
+                            <span>{res.success ? Object.keys(res.data).length : '-'} items</span>
+                            <span className="text-[10px] text-neo-text-dim">{expandedId === res.id ? '▲' : '▼'}</span>
+                          </td>
+                        </motion.tr>
+                        {expandedId === res.id && res.success && (
+                          <tr className="bg-neo-bg-alt/20">
+                            <td colSpan={4} className="px-4 py-3 border-t border-neo-border/50">
+                              <pre className="text-[10px] text-neo-text font-mono whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar p-2 bg-neo-bg/50 rounded border border-neo-border/50">
+                                {JSON.stringify(res.data, null, 2)}
+                              </pre>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </AnimatePresence>
                 </tbody>
