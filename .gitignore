@@ -7,6 +7,8 @@ neo-bridge/node_modules/
 dist/
 neo-ui/dist/
 neo-bridge/dist/
+neo-bridge/src/native/neo-bridge.log
+
 
 # ─── Rust & WASM ───
 neo-core/target/

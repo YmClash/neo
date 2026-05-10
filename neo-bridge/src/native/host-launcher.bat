@@ -1,2 +1,2 @@
 @echo off
-python -u "%~dp0host.py"
+py -3.13 -u "%~dp0host.py"

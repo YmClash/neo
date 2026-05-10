@@ -4,4 +4,6 @@ export { useModules } from './useModules';
 export { useFocusTimer } from './useFocusTimer';
 export * from './useTasks';
 export * from './useProbes';
+export * from './useSystemMetrics';
+export * from './useContextBuffer';
 //# sourceMappingURL=index.js.map

@@ -2,4 +2,5 @@ import '@themes/base.css';
 import '@themes/theme-egghead.css';
 import '@themes/theme-matrix.css';
 import '@themes/theme-punk.css';
+import '@themes/theme-punk-hazard.css';
 //# sourceMappingURL=main.d.ts.map

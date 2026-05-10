@@ -4,6 +4,6 @@
   "path": "C:\\Users\\y_mc\\Desktop\\AKILI PROJECT\\matrix\\neo\\neo-bridge\\src\\native\\host-launcher.bat",
   "type": "stdio",
   "allowed_origins": [
-    "chrome-extension://<YOUR_EXTENSION_ID>/"
+    "chrome-extension://ffgjfbnagioomonnnogobhffpncfkhko/"
   ]
 }
