@@ -6,3 +6,4 @@ export * from './useTasks';
 export * from './useProbes';
 export * from './useSystemMetrics';
 export * from './useContextBuffer';
+export * from './useNeoAI';

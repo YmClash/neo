@@ -1,9 +1,7 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@shared/components';
 import { useSystemMetrics } from '@shared/hooks';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const TWO_PI = Math.PI * 2;
 
@@ -28,7 +26,12 @@ function describeArc(cx: number, cy: number, r: number, pct: number): string {
 
 // ─── Animated Canvas Wave ─────────────────────────────────────────────────────
 
-const OscilloscopeCanvas: React.FC<{ cpu: number; ram: number; isPanic: boolean }> = ({ cpu, ram, isPanic }) => {
+const OscilloscopeCanvas: React.FC<{
+  cpu: number;
+  ram: number;
+  isPanic: boolean;
+  isAIThinking: boolean;
+}> = ({ cpu, ram, isPanic, isAIThinking }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const phaseRef  = useRef(0);
   const rafRef    = useRef<number>(0);
@@ -41,19 +44,18 @@ const OscilloscopeCanvas: React.FC<{ cpu: number; ram: number; isPanic: boolean 
     const W = canvas.width, H = canvas.height, cx = H / 2;
     ctx.clearRect(0, 0, W, H);
 
-    // Grid lines
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
       ctx.beginPath(); ctx.moveTo(0, (H / 4) * i); ctx.lineTo(W, (H / 4) * i); ctx.stroke();
     }
 
-    const amplitude = lerp(6, cx * 0.85, cpu / 100);
-    const frequency = lerp(1.5, 4.5, ram / 100);
-    const color = cpuToColor(cpu, isPanic);
-    phaseRef.current += frequency * 0.04;
+    // AI Thinking = magenta + max amplitude + fast frequency
+    const amplitude = isAIThinking ? cx * 0.9       : lerp(6, cx * 0.85, cpu / 100);
+    const frequency = isAIThinking ? 5.5             : lerp(1.5, 4.5, ram / 100);
+    const color     = isAIThinking ? '#c084fc'       : cpuToColor(cpu, isPanic);
+    phaseRef.current += isAIThinking ? 0.12 : frequency * 0.04;
 
-    // Gradient fill
     const gradient = ctx.createLinearGradient(0, cx - amplitude, 0, cx + amplitude);
     gradient.addColorStop(0, color + '33');
     gradient.addColorStop(1, 'transparent');
@@ -61,7 +63,10 @@ const OscilloscopeCanvas: React.FC<{ cpu: number; ram: number; isPanic: boolean 
     const pts: [number, number][] = [];
     for (let i = 0; i < W; i++) {
       const t = (i / W) * TWO_PI * frequency + phaseRef.current;
-      const y = cx + Math.sin(t) * amplitude + Math.sin(t * 2.1 + 0.5) * (amplitude * 0.25) + Math.sin(t * 0.5 - 0.3) * (amplitude * 0.15);
+      const y = cx
+        + Math.sin(t) * amplitude
+        + Math.sin(t * 2.1 + 0.5) * (amplitude * 0.25)
+        + Math.sin(t * 0.5 - 0.3) * (amplitude * 0.15);
       pts.push([i, y]);
     }
 
@@ -72,12 +77,14 @@ const OscilloscopeCanvas: React.FC<{ cpu: number; ram: number; isPanic: boolean 
 
     ctx.beginPath();
     pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
-    ctx.strokeStyle = color; ctx.lineWidth = isPanic ? 2.5 : 2;
-    ctx.shadowColor = color; ctx.shadowBlur = isPanic ? 16 : 8;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = (isPanic || isAIThinking) ? 2.5 : 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = (isPanic || isAIThinking) ? 20 : 8;
     ctx.stroke(); ctx.shadowBlur = 0;
 
     rafRef.current = requestAnimationFrame(draw);
-  }, [cpu, ram, isPanic]);
+  }, [cpu, ram, isPanic, isAIThinking]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(draw);
@@ -105,8 +112,6 @@ const CircularGauge: React.FC<{ value: number; label: string; color: string; sub
   );
 };
 
-// ─── Tooltip ─────────────────────────────────────────────────────────────────
-
 const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }> }) => {
   if (!active || !payload) return null;
   return (
@@ -115,8 +120,6 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<
     </div>
   );
 };
-
-// ─── Offline State ────────────────────────────────────────────────────────────
 
 const BridgeOffline: React.FC = () => (
   <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
@@ -138,13 +141,24 @@ const BridgeOffline: React.FC = () => (
 
 export const BrainOscilloscope: React.FC = () => {
   const { current, history, isConnected, isPanic, panicLevel, panicReason, lastUpdate } = useSystemMetrics();
+  const [isAIThinking, setAIThinking] = useState(false);
+
+  // Thinking Heartbeat — listens to neo_ai_thinking from chrome.storage
+  useEffect(() => {
+    chrome.storage.local.get('neo_ai_thinking', (r) => setAIThinking(r.neo_ai_thinking ?? false));
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes.neo_ai_thinking !== undefined) setAIThinking(changes.neo_ai_thinking.newValue ?? false);
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
 
   const cpu  = current?.cpu_percent    ?? 0;
   const ram  = current?.memory_percent ?? 0;
   const disk = current?.disk_percent   ?? 0;
 
   const chartData = history.slice(-30).map((p, i) => ({ t: i, cpu: p.cpu, ram: p.ram }));
-  const cpuColor  = cpuToColor(cpu, isPanic);
+  const cpuColor  = isAIThinking ? '#c084fc' : cpuToColor(cpu, isPanic);
   const diskColor = disk > 80 ? '#f97316' : '#34d399';
   const lastStr   = lastUpdate ? new Date(lastUpdate).toLocaleTimeString('fr-FR') : '--:--:--';
 
@@ -154,7 +168,13 @@ export const BrainOscilloscope: React.FC = () => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-mono text-neo-text-dim tracking-wider">🧠 CERVEAU OSCILLOSCOPE</h3>
-          {isPanic && (
+          {isAIThinking && (
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full animate-pulse"
+              style={{ background: 'rgba(192,132,252,0.15)', color: '#c084fc', border: '1px solid #c084fc' }}>
+              🤖 CALCUL IA
+            </span>
+          )}
+          {isPanic && !isAIThinking && (
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full animate-pulse"
               style={{ background: 'rgba(255,34,0,0.2)', color: '#ff2200', border: '1px solid #ff2200' }}>
               ⚠ {panicLevel}
@@ -181,26 +201,30 @@ export const BrainOscilloscope: React.FC = () => {
         </div>
       )}
 
+      {/* AI Thinking Banner */}
+      {isAIThinking && (
+        <div className="mb-3 px-3 py-2 rounded text-[10px] font-mono text-center"
+          style={{ background: 'rgba(192,132,252,0.08)', border: '1px solid rgba(192,132,252,0.25)', color: '#c084fc' }}>
+          🤖 Analyse en cours — Séquence de données synchronisée...
+        </div>
+      )}
+
       {!isConnected ? (
         <BridgeOffline />
       ) : (
         <>
-          {/* Animated Wave */}
-          <div className="mb-4 rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--neo-border)' }}>
-            <OscilloscopeCanvas cpu={cpu} ram={ram} isPanic={isPanic} />
+          <div className="mb-4 rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.4)', border: `1px solid ${isAIThinking ? 'rgba(192,132,252,0.3)' : 'var(--neo-border)'}` }}>
+            <OscilloscopeCanvas cpu={cpu} ram={ram} isPanic={isPanic} isAIThinking={isAIThinking} />
           </div>
 
-          {/* Circular Gauges */}
           <div className="flex justify-around mb-4">
-            <CircularGauge value={cpu}  label="CPU"  color={cpuColor}
-              sublabel={current?.top_processes?.[0]?.name ?? '—'} />
+            <CircularGauge value={cpu}  label="CPU"  color={cpuColor} sublabel={current?.top_processes?.[0]?.name ?? '—'} />
             <CircularGauge value={ram}  label="RAM"  color="#818cf8"
               sublabel={`${current?.memory_used_mb?.toFixed(0) ?? 0}/${current?.memory_total_mb?.toFixed(0) ?? 0}MB`} />
             <CircularGauge value={disk} label="DISK" color={diskColor}
               sublabel={`${current?.disk_used_gb?.toFixed(1) ?? 0}/${current?.disk_total_gb?.toFixed(1) ?? 0}GB`} />
           </div>
 
-          {/* Historical Chart */}
           {chartData.length > 1 && (
             <div className="mb-3">
               <p className="text-[9px] font-mono text-neo-text-dim mb-1 tracking-widest">HISTORIQUE — 90s</p>
@@ -221,13 +245,12 @@ export const BrainOscilloscope: React.FC = () => {
                   <XAxis dataKey="t" hide />
                   <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" dataKey="cpu" name="CPU" stroke={cpuColor} fill="url(#gC)" strokeWidth={1.5} dot={false} />
-                  <Area type="monotone" dataKey="ram" name="RAM" stroke="#818cf8"  fill="url(#gR)" strokeWidth={1.5} dot={false} />
+                  <Area type="monotone" dataKey="ram" name="RAM" stroke="#818cf8" fill="url(#gR)" strokeWidth={1.5} dot={false} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           )}
 
-          {/* Network + Latency */}
           <div className="grid grid-cols-3 gap-2 text-[9px] font-mono">
             <div className="rounded px-2 py-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--neo-border)' }}>
               <div className="text-neo-text-dim">↑ SENT</div>
@@ -243,7 +266,6 @@ export const BrainOscilloscope: React.FC = () => {
             </div>
           </div>
 
-          {/* Top Processes */}
           {(current?.top_processes ?? []).length > 0 && (
             <div className="mt-3">
               <p className="text-[9px] font-mono text-neo-text-dim mb-1 tracking-widest">TOP PROCESSUS</p>

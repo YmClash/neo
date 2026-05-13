@@ -1,5 +1,6 @@
-// Neo Content Script — Probe Injector
+// Neo Content Script — Probe Injector v0.2
 // Injected into web pages to extract data based on configured probe rules.
+// v0.2: Added meta_description and text_preview for Ollama semantic context.
 
 interface ProbeConfig {
   selectors: { [key: string]: string };
@@ -32,15 +33,44 @@ interface ProbeConfig {
             }
           }
         }
+
         if (config.extract_text) data['_body_text'] = document.body.innerText.substring(0, 5000);
         if (config.extract_links) {
-          data['_links'] = [...new Set(Array.from(document.querySelectorAll('a[href]')).map((a) => (a as HTMLAnchorElement).href))].slice(0, 100);
+          data['_links'] = [...new Set(
+            Array.from(document.querySelectorAll('a[href]')).map((a) => (a as HTMLAnchorElement).href)
+          )].slice(0, 100);
         }
         if (config.extract_images) {
-          data['_images'] = [...new Set(Array.from(document.querySelectorAll('img[src]')).map((img) => (img as HTMLImageElement).src))].slice(0, 50);
+          data['_images'] = [...new Set(
+            Array.from(document.querySelectorAll('img[src]')).map((img) => (img as HTMLImageElement).src)
+          )].slice(0, 50);
         }
 
-        sendResponse({ success: true, data: { url: window.location.href, title: document.title, timestamp: Date.now(), data, success: true }, timestamp: Date.now() });
+        // ── Semantic metadata for Ollama context (v0.2) ───────────────────────
+        const metaDesc =
+          (document.querySelector('meta[name="description"]') as HTMLMetaElement)?.content ||
+          (document.querySelector('meta[property="og:description"]') as HTMLMetaElement)?.content ||
+          (document.querySelector('meta[name="og:description"]') as HTMLMetaElement)?.content ||
+          '';
+        const textPreview = document.body.innerText
+          .substring(0, 500)
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        sendResponse({
+          success: true,
+          data: {
+            url: window.location.href,
+            title: document.title,
+            meta_description: metaDesc,
+            text_preview: textPreview,
+            timestamp: Date.now(),
+            data,
+            success: true,
+          },
+          timestamp: Date.now(),
+        });
+
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : String(err) });
       }

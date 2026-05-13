@@ -11,7 +11,8 @@
       "@themes/*": ["src/themes/*"],
       "@wasm/*": ["src/wasm/*"]
     },
-    "types": ["chrome"]
+    "types": ["chrome"],
+    "noEmit": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist"]

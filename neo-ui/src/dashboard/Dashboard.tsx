@@ -8,6 +8,7 @@ import { TaskBoard } from './components/TaskBoard';
 import { WebProbeView } from './components/WebProbeView';
 import { KernelTerminal } from './components/KernelTerminal';
 import { ContextJournal } from './components/ContextJournal';
+import { NeoConsole } from './components/NeoConsole';
 
 // ─── Neo Dashboard v0.2.0 ─────────────────────────────────────────────────────
 // Full-screen monitoring and control interface.
@@ -135,7 +136,16 @@ export const Dashboard: React.FC = () => {
           </section>
         </div>
 
-        {/* ─── Row 3: Kernel Terminal + Context Journal ─────────── */}
+        {/* ─── Row 3: Neo Console (full width) ────────────────── */}
+        <section className="mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs font-mono text-neo-text-dim tracking-widest">◈ NEO CONSOLE — AI</span>
+            <div className="flex-1 h-px bg-neo-border" />
+          </div>
+          <NeoConsole />
+        </section>
+
+        {/* ─── Row 4: Kernel Terminal + Context Journal ─────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <section>
             <div className="flex items-center gap-2 mb-4">
