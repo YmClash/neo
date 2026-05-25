@@ -191,7 +191,15 @@ const PROVIDER_ICON: Record<string, string> = { gemini: '✦', openai: '🤖', c
 
 const MessageBubble: React.FC<{ msg: AIMessage; isNew: boolean }> = ({ msg, isNew }) => {
   const isUser = msg.role === 'user';
-  const [displayed, setDisplayed] = useState(isNew && !isUser ? '' : msg.content);
+  
+  // Parse <think> blocks for reasoning models (DeepSeek, Qwen3.5, Gemini Thinking, etc.)
+  const thinkMatch = !isUser ? msg.content.match(/<think>([\s\S]*?)<\/think>/i) : null;
+  const thought = thinkMatch ? thinkMatch[1].trim() : null;
+  const cleanContent = (!isUser && thinkMatch) 
+    ? msg.content.replace(/<think>[\s\S]*?<\/think>/i, '').trim() 
+    : msg.content;
+
+  const [displayed, setDisplayed] = useState(isNew && !isUser ? '' : cleanContent);
   const idxRef = useRef(0);
 
   useEffect(() => {
@@ -199,11 +207,11 @@ const MessageBubble: React.FC<{ msg: AIMessage; isNew: boolean }> = ({ msg, isNe
     idxRef.current = 0; setDisplayed('');
     const iv = setInterval(() => {
       idxRef.current += 3;
-      setDisplayed(msg.content.slice(0, idxRef.current));
-      if (idxRef.current >= msg.content.length) clearInterval(iv);
+      setDisplayed(cleanContent.slice(0, idxRef.current));
+      if (idxRef.current >= cleanContent.length) clearInterval(iv);
     }, 16);
     return () => clearInterval(iv);
-  }, [msg.content, isNew, isUser]);
+  }, [cleanContent, isNew, isUser]);
 
   const provIcon = PROVIDER_ICON[msg.provider ?? 'ollama'] ?? '🧬';
 
@@ -217,7 +225,20 @@ const MessageBubble: React.FC<{ msg: AIMessage; isNew: boolean }> = ({ msg, isNe
           border: isUser ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(255,255,255,0.08)',
           color: isUser ? '#c7d2fe' : '#e2e8f0',
         }}>
+        
+        {!isUser && thought && (
+          <details className="mb-2" style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', background: 'rgba(0,0,0,0.2)' }}>
+            <summary className="cursor-pointer text-[9px] text-neo-text-dim px-2 py-1.5 opacity-70 hover:opacity-100 transition-opacity" style={{ outline: 'none' }}>
+              🧠 Processus de réflexion
+            </summary>
+            <div className="px-2 py-2 text-[9px] text-neo-text-dim italic" style={{ whiteSpace: 'pre-wrap', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              {thought}
+            </div>
+          </details>
+        )}
+
         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{displayed}</div>
+        
         {!isUser && msg.tokens !== undefined && (
           <div className="flex items-center gap-3 mt-1.5 pt-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <span className="text-[8px] text-neo-text-dim">{msg.provider ?? 'ollama'}</span>
