@@ -53,3 +53,6 @@ CODEX_BOARD.md
 # ─── Phase 5 : Codex Sémantique ───
 neo-bridge/data/          # ChromaDB vector database (données personnelles)
 neo-bridge/src/native/neo-bridge.log
+neo-bridge/data/chroma/chroma.sqlite3
+neo-bridge/data/chroma/53f2653e-94d8-491c-93c8-d7e00753fb17/data_level0.bin
+neo-bridge/data/chroma/53f2653e-94d8-491c-93c8-d7e00753fb17/length.bin
