@@ -1,0 +1,9 @@
+{
+  "name": "com.neo.bridge",
+  "description": "Neo — Native Messaging Host for system bridge",
+  "path": "C:\\Users\\y_mc\\Desktop\\AKILI PROJECT\\matrix\\neo\\neo-bridge\\src\\native\\host-launcher.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://ffgjfbnagioomonnnogobhffpncfkhko/"
+  ]
+}

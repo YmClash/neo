@@ -1,0 +1,58 @@
+# ─── Dependencies ───
+node_modules/
+neo-ui/node_modules/
+neo-bridge/node_modules/
+
+# ─── Build Artifacts & Output ───
+dist/
+neo-ui/dist/
+neo-bridge/dist/
+neo-bridge/src/native/neo-bridge.log
+*.js.map
+*.d.ts.map
+*.d.ts
+
+# ─── Stale compiled JS dans les sources (tsc errant) ───
+# Ces .js sont générés si tsc est lancé sans outDir → écrasent les .tsx pour Vite
+# Régénérés proprement par build:all — ne jamais les committer
+neo-ui/src/**/*.js
+# Exception : neo_core.js est généré par wasm-pack (couvert par neo-ui/src/wasm/ ci-dessous)
+
+
+# ─── Rust & WASM ───
+neo-core/target/
+neo-core/pkg/
+neo-ui/src/wasm/
+
+# ─── Environment & Secrets ───
+.env
+.env.local
+.env.*.local
+
+# ─── Logs & Caches ───
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+.vite/
+
+# ─── OS & Editor ───
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Personal Notes
+CODEX_BOARD.md
+
+
+# Note: Do not ignore package-lock.json or Cargo.lock
+
+# ─── Phase 5 : Codex Sémantique ───
+neo-bridge/data/          # ChromaDB vector database (données personnelles)
+neo-bridge/src/native/neo-bridge.log
+neo-bridge/data/chroma/chroma.sqlite3
+neo-bridge/data/chroma/53f2653e-94d8-491c-93c8-d7e00753fb17/data_level0.bin
+neo-bridge/data/chroma/53f2653e-94d8-491c-93c8-d7e00753fb17/length.bin

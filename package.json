@@ -1,0 +1,29 @@
+{
+  "name": "neo-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Neo — Advanced Monitoring & Control Chrome Extension",
+  "author": "Dr. Y_MC",
+  "license": "MIT",
+  "workspaces": [
+    "neo-ui",
+    "neo-bridge"
+  ],
+  "scripts": {
+    "build:wasm": "cd neo-core && wasm-pack build --target web --out-dir ../neo-ui/src/wasm --out-name neo_core",
+    "build:ui": "cd neo-ui && npm run build",
+    "build:bridge": "cd neo-bridge && npm run build",
+    "build:all": "npm run build:wasm && npm run build:ui && npm run build:bridge && npm run post:build",
+    "post:build": "node scripts/post-build.js",
+    "dev": "cd neo-ui && npm run dev",
+    "test:wasm": "cd neo-core && cargo test",
+    "clean:src-js": "npx --yes rimraf --glob \"neo-ui/src/**/*.js\"",
+    "clean": "npx --yes rimraf dist neo-ui/dist neo-core/pkg neo-ui/src/wasm && npm run clean:src-js",
+    "clean:hard": "npm run clean && npx --yes rimraf node_modules neo-ui/node_modules neo-bridge/node_modules package-lock.json",
+    "reset": "npm run clean:hard && npm install",
+    "package": "npm run build:all && node scripts/package.js"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.0"
+  }
+}

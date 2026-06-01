@@ -1,0 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Neo — Theme: Punk
+   🔴 Red/Orange cyberpunk — Inspired by Punk Hazard's raw energy
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="punk"] {
+  /* Background layers */
+  --neo-bg:           #0f0a0a;
+  --neo-bg-alt:       #1a0e0e;
+  --neo-surface:      #2e1a1a;
+
+  /* Borders */
+  --neo-border:       #4a2020;
+
+  /* Text */
+  --neo-text:         #f0dede;
+  --neo-text-dim:     #b07070;
+
+  /* Accent — Crimson/Fire */
+  --neo-accent:       #ef4444;
+  --neo-accent-hover: #f87171;
+
+  /* Status */
+  --neo-success:      #4ade80;
+  --neo-warning:      #fb923c;
+  --neo-danger:       #ef4444;
+  --neo-info:         #38bdf8;
+
+  /* Effects */
+  --neo-glow:         rgba(239, 68, 68, 0.4);
+}

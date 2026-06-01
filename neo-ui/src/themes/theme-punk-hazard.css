@@ -1,0 +1,75 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Neo — Theme: Punk Hazard
+   🔴 Emergency mode — thermal/load protection visual alert
+   Activated automatically by the Service Worker when CPU/RAM surge is detected.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="punk-hazard"] {
+  /* Background — deep red emergency */
+  --neo-bg:           #0d0000;
+  --neo-bg-alt:       #1a0000;
+  --neo-surface:      #2a0808;
+
+  /* Borders — lava orange */
+  --neo-border:       #5c1010;
+
+  /* Text */
+  --neo-text:         #ffd0d0;
+  --neo-text-dim:     #c07070;
+
+  /* Accent — fire red / molten orange */
+  --neo-accent:       #ff2200;
+  --neo-accent-hover: #ff6600;
+
+  /* Status */
+  --neo-success:      #4ade80;
+  --neo-warning:      #ff6600;
+  --neo-danger:       #ff0000;
+  --neo-info:         #ff8844;
+
+  /* Effects — red glow */
+  --neo-glow:         rgba(255, 34, 0, 0.5);
+}
+
+/* ── Punk Hazard scanline pulse animation ──────────────────────────────────── */
+[data-theme="punk-hazard"] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 0, 0, 0.03) 2px,
+    rgba(255, 0, 0, 0.03) 4px
+  );
+  animation: panicScanline 0.1s steps(1) infinite;
+}
+
+@keyframes panicScanline {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 4px; }
+}
+
+/* ── Panic border pulse on the entire viewport ─────────────────────────────── */
+[data-theme="punk-hazard"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  border: 2px solid var(--neo-accent);
+  box-shadow: inset 0 0 60px rgba(255, 34, 0, 0.15),
+              0 0 60px rgba(255, 34, 0, 0.1);
+  animation: panicPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes panicPulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1.0; }
+}
