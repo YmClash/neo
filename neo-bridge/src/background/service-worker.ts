@@ -41,6 +41,7 @@ const BUFFER_MAX_SIZE     = 50;
 const CODEX_MAX_SIMPLE    = 100;                  // chrome.storage Tier-1 hard limit
 const DEFAULT_AI_MODEL    = 'llama3.2:3b';
 const DEFAULT_PROVIDER    = 'ollama';
+const SEMANTIC_PROBE_MODEL = 'smollm2:latest';    // Phase 6D — light model for probe analysis
 
 // ─── Ollama Direct API (fetch — no Native Messaging timeout) ─────────────────
 
@@ -415,6 +416,110 @@ async function runProactiveAnalysis(): Promise<void> {
   }
 }
 
+// ─── Probe Semantic Analysis ───────────────────────────────────────────────────────────────
+
+// Phase 6D — FNV-1a hash mirroring host.py / neo-core/crypto.rs
+// Used for Codex deduplication: same URL always yields same Codex entry ID.
+function fnv1aHash(text: string): string {
+  const FNV_OFFSET = BigInt('0xcbf29ce484222325');
+  const FNV_PRIME  = BigInt('0x00000100000001B3');
+  const MASK64     = BigInt('0xFFFFFFFFFFFFFFFF');
+  let h = FNV_OFFSET;
+  const encoded = new TextEncoder().encode(text);
+  for (const byte of encoded) {
+    h = (h ^ BigInt(byte)) & MASK64;
+    h = (h * FNV_PRIME) & MASK64;
+  }
+  return h.toString(16).padStart(16, '0');
+}
+
+// Fire-and-forget semantic analysis for a completed probe.
+// Calls host.py semantic_probe → stores result in chrome.storage → auto-adds to Codex if worthy.
+async function runProbeAnalysis(payload: {
+  probeId: string;
+  url: string;
+  title: string;
+  meta_description: string;
+  text: string; // raw body text
+  model?: string;
+}): Promise<void> {
+  const storageKey = `neo_probe_analysis_${fnv1aHash(payload.url)}`;
+  try {
+    // Mark as analyzing
+    await chrome.storage.local.set({
+      [storageKey]: { analyzing: true, probeId: payload.probeId, url: payload.url },
+    });
+
+    const resp = await sendNativeMessage({
+      action:           'semantic_probe',
+      text:             payload.text,
+      title:            payload.title,
+      meta_description: payload.meta_description,
+      url:              payload.url,
+      model:            payload.model ?? SEMANTIC_PROBE_MODEL,
+    }) as { type: string; data: Record<string, unknown> };
+
+    if (resp.type !== 'semantic_probe_result') {
+      throw new Error(`Unexpected response type: ${resp.type}`);
+    }
+
+    const analysis = resp.data;
+
+    // Inject routing fields BEFORE storing — required by useProbes.ts listener:
+    // without analysis.url the storage listener cannot match the result and
+    // mergeAnalysis() is never called → UI stays stuck on "ANALYZING...".
+    analysis['url']       = payload.url;
+    analysis['probeId']   = payload.probeId;
+    analysis['analyzing'] = false;
+
+    // Persist result (triggers storage.onChanged → useProbes mergeAnalysis)
+    await chrome.storage.local.set({ [storageKey]: analysis });
+
+    // Sync Codex Tier-1 storage if auto-saved by host.py
+    if (analysis['codex_worthy'] && analysis['codex_saved']) {
+      const codexId = String(analysis['codex_id'] ?? '');
+      const stored4 = await chrome.storage.local.get('neo_codex_entries');
+      const entries: unknown[] = stored4.neo_codex_entries || [];
+      // Upsert: replace existing entry with same id, or prepend
+      const idx = (entries as Array<{ id: string }>).findIndex((e) => e.id === codexId);
+      const newEntry = {
+        id:      codexId,
+        title:   String(analysis['theme'] ?? payload.title).slice(0, 60),
+        content: String(analysis['summary'] ?? '').slice(0, 500),
+        tags:    (analysis['themes'] as string[] | undefined) ?? [],
+        ts:      Date.now(),
+      };
+      if (idx >= 0) {
+        entries[idx] = newEntry;
+      } else {
+        entries.unshift(newEntry);
+        if (entries.length > CODEX_MAX_SIMPLE) entries.splice(CODEX_MAX_SIMPLE);
+      }
+      await chrome.storage.local.set({ neo_codex_entries: entries });
+    }
+
+    // Enrich context buffer entry
+    await appendToContextBuffer('probe_semantic_done', {
+      url:             payload.url,
+      theme:           analysis['theme'],
+      relevance_score: analysis['relevance_score'],
+      codex_worthy:    analysis['codex_worthy'],
+      method:          analysis['method'],
+    });
+
+    console.log(`[Neo SW] 🧠 Semantic probe done — ${payload.url.slice(0, 60)} (method=${analysis['method']}, codex=${analysis['codex_worthy']})`);
+  } catch (err) {
+    console.warn('[Neo SW] runProbeAnalysis error:', err);
+    // Store error state so UI shows NANO badge
+    await chrome.storage.local.set({
+      [storageKey]: {
+        analyzing: false, probeId: payload.probeId, url: payload.url,
+        method: 'nano', error: String(err), codex_saved: false, codex_worthy: false,
+      },
+    });
+  }
+}
+
 // ─── Message Router ───────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(
@@ -582,10 +687,9 @@ async function handleMessage(
 
     // ─── Web Probes ───────────────────────────────────────────
     case 'PROBE_COMPLETE': {
-      const { url, itemCount, sentiment, title, meta_description, text_preview } = message.payload as {
+      const { url, itemCount, title, meta_description, text_preview } = message.payload as {
         url: string;
         itemCount: number;
-        sentiment?: { score: number; label: string };
         title?: string;
         meta_description?: string;
         text_preview?: string;
@@ -594,12 +698,33 @@ async function handleMessage(
         notifyProbeResult(url, itemCount);
       });
       await appendToContextBuffer('probe_executed', {
-        url, items: itemCount, sentiment,
+        url, items: itemCount,
         title: title ?? '',
         meta_description: meta_description ?? '',
-        text_preview: text_preview ?? '',
+        text_preview: (text_preview ?? '').slice(0, 200),
       });
+
+      // Phase 6D — fire-and-forget semantic analysis (Filtre Cognitif)
+      const probeId = `probe-${Date.now()}`;
+      runProbeAnalysis({
+        probeId,
+        url,
+        title:            title ?? '',
+        meta_description: meta_description ?? '',
+        text:             text_preview ?? '',
+      }).catch((e) => console.warn('[Neo SW] Semantic analysis failed silently:', e));
+
       return { success: true, timestamp: Date.now() };
+    }
+
+    // ─── Probe Semantic Analysis (explicit request from UI) ───
+    case 'PROBE_ANALYZE': {
+      const pa = message.payload as {
+        probeId: string; url: string; title: string;
+        meta_description: string; text: string; model?: string;
+      };
+      runProbeAnalysis(pa).catch(() => {});
+      return { success: true, data: { queued: true, url: pa.url }, timestamp: Date.now() };
     }
 
     // ─── Tasks ────────────────────────────────────────────────
@@ -1032,4 +1157,5 @@ function getDefaultModules() {
   ];
 }
 
-console.log('[Neo SW] 🧬 Service Worker v0.2.0 loaded.');
+console.log('[Neo SW] 🧬 Service Worker v0.5.0 loaded — Phase 6D (Semantic Probe Upgrade).');
+

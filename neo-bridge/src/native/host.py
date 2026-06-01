@@ -659,49 +659,148 @@ def handle_ollama_status() -> dict:
         return {"type": "ollama_status", "data": {"available": False, "models": [], "error": str(e)}}
 
 
-def handle_sentiment_deep(text: str, model: str = "qwen3.5:latest") -> dict:
-    """Deep semantic analysis via Ollama (for Web Probes)."""
+def handle_sentiment_deep(text: str, model: str = "smollm2:latest") -> dict:
+    """Legacy deep sentiment — wraps handle_semantic_probe for backward compat."""
+    result = handle_semantic_probe(text=text, title="", meta_description="", url="", model=model)
+    return {"type": "sentiment_result", "data": result.get("data", {})}
+
+
+# ─── Semantic Probe — Phase 6D ─────────────────────────────────────────────────
+
+# FNV-1a hash (mirrors neo_core/crypto.rs) — used for URL deduplication in Codex
+def _fnv1a_hash(text: str) -> str:
+    """Fast 64-bit FNV-1a hash identical to the Rust WASM implementation."""
+    FNV_OFFSET = 0xcbf29ce484222325
+    FNV_PRIME  = 0x00000100000001B3
+    h = FNV_OFFSET
+    for byte in text.encode("utf-8"):
+        h ^= byte
+        h = (h * FNV_PRIME) & 0xFFFFFFFFFFFFFFFF
+    return f"{h:016x}"
+
+
+# Extraction prompt — strict JSON schema for small models
+_SEMANTIC_PROBE_SYSTEM = (
+    "Tu es Neo, un analyseur de données ultra-précis. "
+    "Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant ou après."
+)
+
+_SEMANTIC_PROBE_PROMPT = """\
+Analyse ce contenu de page web et retourne UNIQUEMENT ce JSON (aucun autre texte) :
+{{
+  "theme": "<sujet principal en 3 mots max>",
+  "summary": "<résumé en 1-2 phrases>",
+  "entities": ["<entité1>", "<entité2>"],
+  "themes": ["<thème1>", "<thème2>"],
+  "relevance_score": <float 0.0-1.0>,
+  "relevance_label": "<High|Medium|Low>",
+  "sentiment": {{"score": <float -1.0 à 1.0>, "label": "<positive|negative|neutral>"}},
+  "codex_worthy": <true|false>,
+  "method": "ollama"
+}}
+
+URL: {url}
+Titre: {title}
+Description: {meta}
+Contenu (3000 chars max):
+{body}"""
+
+
+def handle_semantic_probe(
+    text: str,
+    title: str,
+    meta_description: str,
+    url: str,
+    model: str = "smollm2:latest",
+) -> dict:
+    """Filtre Cognitif LLM — Phase 6D Semantic Probe Upgrade.
+
+    Pipeline:
+    1. Troncature à 3000 chars (Guillotine à tokens)
+    2. Appel Ollama avec format:json (Bouclier anti-hallucination)
+    3. Fallback nano si Ollama offline
+    4. Auto-sauvegarde Codex si codex_worthy=True (déduplication via URL-hash)
+    """
+    # ── 1. Guillotine à tokens ───────────────────────────────────────────────
+    body = text.replace("\n", " ").replace("\r", " ")
+    body = " ".join(body.split())  # collapse whitespace
+    body = body[:3000]
+
+    # ── 2. Appel Ollama avec format JSON forcé ───────────────────────────────
+    analysis = None
     try:
         import requests as req
-        prompt = f"""Analyse ce texte de manière concise et retourne un JSON avec ces champs UNIQUEMENT :
-{{"score": float entre -1.0 et 1.0, "label": "positive"|"negative"|"neutral", "summary": "résumé en 1 phrase", "key_topics": ["sujet1","sujet2","sujet3"]}}
-
-Texte à analyser:
-{text[:2000]}
-
-Réponds UNIQUEMENT avec le JSON, sans markdown ni explication."""
-
+        prompt = _SEMANTIC_PROBE_PROMPT.format(
+            url=url[:100],
+            title=title[:120],
+            meta=meta_description[:200],
+            body=body,
+        )
         response = req.post(
             f"{OLLAMA_BASE_URL}/api/generate",
-            json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.1, "num_predict": 200}},
+            json={
+                "model": model,
+                "prompt": prompt,
+                "system": _SEMANTIC_PROBE_SYSTEM,
+                "stream": False,
+                "format": "json",          # ← Bouclier anti-hallucination
+                "keep_alive": -1,
+                "options": {"temperature": 0.1, "num_predict": 256},
+            },
             timeout=60,
         )
         response.raise_for_status()
         raw = response.json().get("response", "").strip()
 
-        # Extract JSON from response
+        # Defensive JSON extraction (même avec format:json certains modèles bavardent)
         start = raw.find("{")
-        end = raw.rfind("}") + 1
+        end   = raw.rfind("}") + 1
         if start >= 0 and end > start:
-            result = json.loads(raw[start:end])
-            result["method"] = "ollama"
-            result["model"] = model
-            return {"type": "sentiment_result", "data": result}
+            analysis = json.loads(raw[start:end])
+            analysis["method"] = "ollama"
+            analysis["model"]  = model
         else:
-            raise ValueError(f"No JSON found in response: {raw[:100]}")
+            raise ValueError(f"No JSON object found: {raw[:120]}")
 
     except Exception as e:
-        log.warning(f"sentiment_deep fallback to nano: {e}")
-        result = analyze_sentiment_nano(text)
-        result["ollama_error"] = str(e)
-        return {"type": "sentiment_result", "data": result}
+        log.warning(f"semantic_probe Ollama error — fallback to nano: {e}")
+
+    # ── 3. Fallback nano ─────────────────────────────────────────────────────
+    if analysis is None:
+        nano = analyze_sentiment_nano(f"{title} {meta_description} {body}")
+        analysis = {
+            "theme":           title[:40] or "inconnu",
+            "summary":         meta_description[:200] or body[:150],
+            "entities":        [],
+            "themes":          [],
+            "relevance_score": 0.4,
+            "relevance_label": "Low",
+            "sentiment":       {"score": nano["score"], "label": nano["label"]},
+            "codex_worthy":    False,
+            "method":          "nano",
+        }
+
+    # ── 4. Auto-sauvegarde Codex (déduplication via URL-hash) ───────────────
+    if analysis.get("codex_worthy") and url:
+        url_hash  = f"probe_{_fnv1a_hash(url)}"
+        summary   = analysis.get("summary", "")[:500]
+        themes    = analysis.get("themes", [])
+        title_str = analysis.get("theme", title)[:60]
+        save_result = _codex.add(url_hash, title_str, summary, tags=themes)
+        analysis["codex_id"]    = url_hash
+        analysis["codex_saved"] = save_result.get("ok", False)
+        log.info(f"semantic_probe: Codex auto-saved '{title_str}' (id={url_hash}, ok={save_result.get('ok')})")
+    else:
+        analysis["codex_saved"] = False
+
+    return {"type": "semantic_probe_result", "data": analysis}
 
 
 # ─── Main Loop ─────────────────────────────────────────────────────────────────
 
 def main() -> None:
     log.info("=" * 60)
-    log.info("Neo Bridge Host v0.4.0 started — Phase 5 (Codex Sémantique)")
+    log.info("Neo Bridge Host v0.5.0 started — Phase 6D (Semantic Probe Upgrade)")
     log.info(f"Python: {platform.python_version()} | Platform: {platform.system()}")
     log.info(f"Codex: ChromaDB {'READY' if _codex._available else 'UNAVAILABLE (install-chromadb.ps1)'}")
     log.info("=" * 60)
@@ -727,7 +826,15 @@ def main() -> None:
             elif action == "sentiment":
                 response = handle_sentiment(message.get("text", ""))
             elif action == "sentiment_deep":
-                response = handle_sentiment_deep(message.get("text", ""), message.get("model", "qwen3.5:latest"))
+                response = handle_sentiment_deep(message.get("text", ""), message.get("model", "smollm2:latest"))
+            elif action == "semantic_probe":
+                response = handle_semantic_probe(
+                    text=message.get("text", ""),
+                    title=message.get("title", ""),
+                    meta_description=message.get("meta_description", ""),
+                    url=message.get("url", ""),
+                    model=message.get("model", "smollm2:latest"),
+                )
             elif action == "ollama_query":
                 response = handle_ollama_query(
                     prompt=message.get("prompt", ""),
@@ -759,7 +866,7 @@ def main() -> None:
             elif action == "codex_status":
                 response = handle_codex_status()
             elif action == "version":
-                response = {"type": "version", "data": {"version": "0.4.0", "name": "Neo Bridge Host", "features": ["system_metrics", "panic_detector", "sentiment", "sentiment_deep", "ollama_query", "ollama_status", "execute", "codex_add", "codex_search", "codex_get_all", "codex_delete", "codex_clear", "codex_reindex", "codex_status"]}}
+                response = {"type": "version", "data": {"version": "0.5.0", "name": "Neo Bridge Host", "features": ["system_metrics", "panic_detector", "sentiment", "sentiment_deep", "semantic_probe", "ollama_query", "ollama_status", "execute", "codex_add", "codex_search", "codex_get_all", "codex_delete", "codex_clear", "codex_reindex", "codex_status"]}}
             else:
                 log.warning(f"Unknown action: {action}")
                 response = {"type": "error", "message": f"Action inconnue : '{action}'"}
