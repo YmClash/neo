@@ -9,6 +9,7 @@ import { WebProbeView } from './components/WebProbeView';
 import { KernelTerminal } from './components/KernelTerminal';
 import { ContextJournal } from './components/ContextJournal';
 import { NeoConsole } from './components/NeoConsole';
+import { NeoCodex } from './components/NeoCodex';
 
 // ─── Neo Dashboard v0.2.0 ─────────────────────────────────────────────────────
 // Full-screen monitoring and control interface.
@@ -164,21 +165,31 @@ export const Dashboard: React.FC = () => {
           </section>
         </div>
 
-        {/* ─── Row 4: Web Probes (full width) ──────────────────── */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs font-mono text-neo-text-dim tracking-widest">◈ WEB PROBES</span>
-            <div className="flex-1 h-px bg-neo-border" />
-          </div>
-          <WebProbeView />
-        </section>
+        {/* ─── Row 5: Codex Sémantique + Web Probes ────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-mono text-neo-text-dim tracking-widest">◈ CODEX SÉMANTIQUE</span>
+              <div className="flex-1 h-px bg-neo-border" />
+            </div>
+            <NeoCodex />
+          </section>
+
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-mono text-neo-text-dim tracking-widest">◈ WEB PROBES</span>
+              <div className="flex-1 h-px bg-neo-border" />
+            </div>
+            <WebProbeView />
+          </section>
+        </div>
       </main>
 
       {/* ─── Footer ──────────────────────────────────────────────── */}
       <footer className="border-t border-neo-border py-4 mt-8">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <span className="text-[10px] font-mono text-neo-text-dim">
-            NEO v0.2.0 — EGGHEAD LABORATORY
+            NEO v0.3.0 — PHASE 5 — EGGHEAD LABORATORY
           </span>
           <span className="text-[10px] font-mono text-neo-text-dim">
             {new Date().toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })}

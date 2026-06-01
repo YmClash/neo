@@ -17,7 +17,8 @@
     "post:build": "node scripts/post-build.js",
     "dev": "cd neo-ui && npm run dev",
     "test:wasm": "cd neo-core && cargo test",
-    "clean": "npx --yes rimraf dist neo-ui/dist neo-core/pkg neo-ui/src/wasm",
+    "clean:src-js": "npx --yes rimraf --glob \"neo-ui/src/**/*.js\"",
+    "clean": "npx --yes rimraf dist neo-ui/dist neo-core/pkg neo-ui/src/wasm && npm run clean:src-js",
     "clean:hard": "npm run clean && npx --yes rimraf node_modules neo-ui/node_modules neo-bridge/node_modules package-lock.json",
     "reset": "npm run clean:hard && npm install",
     "package": "npm run build:all && node scripts/package.js"

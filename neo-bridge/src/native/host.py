@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-Neo Native Messaging Host — v0.3.0 (Phase 4 — AI)
-Bridges the Chrome extension with the local OS and Ollama LLM.
+Neo Native Messaging Host — v0.4.0 (Phase 5 — Codex Sémantique + IA Proactive)
+Bridges the Chrome extension with the local OS, Ollama LLM, and ChromaDB.
 
-New in v0.3.0:
-  - ollama_query   : Send a prompt to a local Ollama model with Neo context
-  - ollama_status  : Check Ollama availability and list models
-  - sentiment_deep : Deep semantic analysis via Ollama (replaces Nano Engine for probes)
+New in v0.4.0:
+  - CodexManager   : ChromaDB vector database with Ollama nomic-embed-text embeddings
+  - codex_add      : Add an entry with semantic embedding (keep_alive:-1 anti-thrashing)
+  - codex_search   : Semantic search via cosine similarity
+  - codex_get_all  : List all Codex entries
+  - codex_delete   : Remove an entry by ID
+  - codex_clear    : Wipe the entire Codex collection
+  - codex_reindex  : Regenerate all embeddings (migration helper)
+  - codex_status   : ChromaDB availability + entry count + embed model info
 
 Protocol: stdin/stdout with 32-bit length header (Chrome Native Messaging).
 Logs:     neo-bridge.log (file, NOT stderr)
@@ -18,6 +23,7 @@ import struct
 import subprocess
 import platform
 import os
+import time
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -74,6 +80,242 @@ def analyze_sentiment_nano(text: str) -> dict:
     score = max(-1.0, min(1.0, (pos - neg) / total * 15))
     label = "positive" if score > 0.08 else "negative" if score < -0.08 else "neutral"
     return {"score": round(score, 3), "label": label, "positive_hits": pos, "negative_hits": neg, "method": "nano"}
+
+
+# ─── Codex Manager (ChromaDB + Ollama Embeddings) ────────────────────────────
+
+CODEX_DB_PATH = Path(__file__).parent / "../../data/chroma"
+CODEX_EMBED_MODEL = "nomic-embed-text"
+
+
+class CodexManager:
+    """Manages the Neo semantic memory using ChromaDB and Ollama embeddings.
+    
+    Embeddings are generated via Ollama's /api/embeddings endpoint with
+    keep_alive:-1 to prevent VRAM/RAM thrashing on low-end hardware (GTX 970).
+    Each entry stores embed_model in metadata for future migration support.
+    """
+
+    def __init__(self):
+        self._client = None
+        self._collection = None
+        self._available = False
+        self._init()
+
+    def _init(self) -> None:
+        try:
+            import chromadb
+            CODEX_DB_PATH.mkdir(parents=True, exist_ok=True)
+            self._client = chromadb.PersistentClient(path=str(CODEX_DB_PATH))
+            self._collection = self._client.get_or_create_collection(
+                name="neo_codex",
+                metadata={"hnsw:space": "cosine"},
+            )
+            self._available = True
+            log.info(f"CodexManager: ChromaDB initialized — {self._collection.count()} entries")
+        except ImportError:
+            log.warning("CodexManager: chromadb not installed. Run install-chromadb.ps1")
+        except Exception as e:
+            log.error(f"CodexManager init error: {e}")
+
+    def _get_embedding(self, text: str) -> list | None:
+        """Generate embedding via Ollama nomic-embed-text.
+        keep_alive:-1 keeps the model in RAM to avoid reload latency.
+        Falls back to None if Ollama is offline (ChromaDB uses its own embedder).
+        """
+        try:
+            import requests as req
+            resp = req.post(
+                f"{OLLAMA_BASE_URL}/api/embeddings",
+                json={"model": CODEX_EMBED_MODEL, "prompt": text, "keep_alive": -1},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return resp.json().get("embedding")
+        except Exception as e:
+            log.warning(f"CodexManager: embedding fallback (Ollama offline?) — {e}")
+            return None  # ChromaDB will use its default embedder
+
+    def add(self, entry_id: str, title: str, content: str, tags: list[str] = []) -> dict:
+        if not self._available:
+            return {"ok": False, "error": "ChromaDB not available"}
+        try:
+            document = f"{title}: {content}"
+            embedding = self._get_embedding(document)
+            metadata = {
+                "title": title,
+                "ts": int(time.time() * 1000),
+                "tags": ",".join(tags),
+                "embed_model": CODEX_EMBED_MODEL,  # traçabilité pour migration future
+            }
+            if embedding:
+                self._collection.add(documents=[content], embeddings=[embedding],
+                                     metadatas=[metadata], ids=[entry_id])
+            else:
+                self._collection.add(documents=[content], metadatas=[metadata], ids=[entry_id])
+            log.info(f"Codex add: '{title}' (id={entry_id})")
+            return {"ok": True, "id": entry_id}
+        except Exception as e:
+            log.error(f"Codex add error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def search(self, query: str, n_results: int = 3) -> list:
+        if not self._available:
+            return []
+        try:
+            count = self._collection.count()
+            if count == 0:
+                return []
+            n = min(n_results, count)
+            embedding = self._get_embedding(query)
+            if embedding:
+                results = self._collection.query(query_embeddings=[embedding], n_results=n,
+                                                  include=["documents", "metadatas", "distances"])
+            else:
+                results = self._collection.query(query_texts=[query], n_results=n,
+                                                  include=["documents", "metadatas", "distances"])
+            out = []
+            for i, doc in enumerate(results["documents"][0]):
+                meta = results["metadatas"][0][i]
+                dist = results["distances"][0][i] if results.get("distances") else 0.5
+                out.append({
+                    "id": results["ids"][0][i],
+                    "title": meta.get("title", ""),
+                    "content": doc,
+                    "tags": meta.get("tags", "").split(",") if meta.get("tags") else [],
+                    "ts": meta.get("ts", 0),
+                    "distance": round(dist, 4),
+                    "embed_model": meta.get("embed_model", "unknown"),
+                })
+            return out
+        except Exception as e:
+            log.error(f"Codex search error: {e}")
+            return []
+
+    def get_all(self) -> list:
+        if not self._available:
+            return []
+        try:
+            if self._collection.count() == 0:
+                return []
+            results = self._collection.get(include=["documents", "metadatas"])
+            out = []
+            for i, doc in enumerate(results["documents"]):
+                meta = results["metadatas"][i]
+                out.append({
+                    "id": results["ids"][i],
+                    "title": meta.get("title", ""),
+                    "content": doc,
+                    "tags": meta.get("tags", "").split(",") if meta.get("tags") else [],
+                    "ts": meta.get("ts", 0),
+                    "embed_model": meta.get("embed_model", "unknown"),
+                })
+            # Sort by ts descending (newest first)
+            out.sort(key=lambda x: x["ts"], reverse=True)
+            return out
+        except Exception as e:
+            log.error(f"Codex get_all error: {e}")
+            return []
+
+    def delete(self, entry_id: str) -> dict:
+        if not self._available:
+            return {"ok": False, "error": "ChromaDB not available"}
+        try:
+            self._collection.delete(ids=[entry_id])
+            log.info(f"Codex delete: id={entry_id}")
+            return {"ok": True}
+        except Exception as e:
+            log.error(f"Codex delete error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def clear(self) -> dict:
+        if not self._available or not self._client:
+            return {"ok": False, "error": "ChromaDB not available"}
+        try:
+            self._client.delete_collection("neo_codex")
+            self._collection = self._client.get_or_create_collection(
+                name="neo_codex", metadata={"hnsw:space": "cosine"}
+            )
+            log.info("Codex cleared — collection recreated")
+            return {"ok": True}
+        except Exception as e:
+            log.error(f"Codex clear error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def reindex(self) -> dict:
+        """Regenerate all embeddings — used when switching embed models."""
+        if not self._available:
+            return {"ok": False, "error": "ChromaDB not available"}
+        try:
+            all_entries = self.get_all()
+            if not all_entries:
+                return {"ok": True, "reindexed": 0}
+            self.clear()
+            count = 0
+            for entry in all_entries:
+                result = self.add(entry["id"], entry["title"], entry["content"], entry["tags"])
+                if result.get("ok"):
+                    count += 1
+            log.info(f"Codex reindex complete: {count}/{len(all_entries)} entries")
+            return {"ok": True, "reindexed": count, "total": len(all_entries)}
+        except Exception as e:
+            log.error(f"Codex reindex error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    def status(self) -> dict:
+        try:
+            import chromadb
+            chroma_installed = True
+        except ImportError:
+            chroma_installed = False
+        return {
+            "available": self._available,
+            "chroma_installed": chroma_installed,
+            "n_entries": self._collection.count() if self._available else 0,
+            "embed_model": CODEX_EMBED_MODEL,
+            "db_path": str(CODEX_DB_PATH),
+        }
+
+
+# Singleton instance — initialized once on host startup
+_codex = CodexManager()
+
+
+# ─── Codex Handlers ────────────────────────────────────────────────────────────
+
+def handle_codex_add(entry_id: str, title: str, content: str, tags: list = []) -> dict:
+    result = _codex.add(entry_id, title, content, tags)
+    return {"type": "codex_result", "data": result}
+
+
+def handle_codex_search(query: str, n_results: int = 3) -> dict:
+    results = _codex.search(query, n_results)
+    return {"type": "codex_search_result", "data": {"results": results, "query": query, "n_results": len(results)}}
+
+
+def handle_codex_get_all() -> dict:
+    entries = _codex.get_all()
+    return {"type": "codex_entries", "data": {"entries": entries, "count": len(entries)}}
+
+
+def handle_codex_delete(entry_id: str) -> dict:
+    result = _codex.delete(entry_id)
+    return {"type": "codex_result", "data": result}
+
+
+def handle_codex_clear() -> dict:
+    result = _codex.clear()
+    return {"type": "codex_result", "data": result}
+
+
+def handle_codex_reindex() -> dict:
+    result = _codex.reindex()
+    return {"type": "codex_reindex_result", "data": result}
+
+
+def handle_codex_status() -> dict:
+    status = _codex.status()
+    return {"type": "codex_status", "data": status}
 
 
 # ─── Panic Detector ────────────────────────────────────────────────────────────
@@ -459,8 +701,9 @@ Réponds UNIQUEMENT avec le JSON, sans markdown ni explication."""
 
 def main() -> None:
     log.info("=" * 60)
-    log.info("Neo Bridge Host v0.3.0 started")
+    log.info("Neo Bridge Host v0.4.0 started — Phase 5 (Codex Sémantique)")
     log.info(f"Python: {platform.python_version()} | Platform: {platform.system()}")
+    log.info(f"Codex: ChromaDB {'READY' if _codex._available else 'UNAVAILABLE (install-chromadb.ps1)'}")
     log.info("=" * 60)
 
     while True:
@@ -496,8 +739,27 @@ def main() -> None:
                 response = handle_ollama_warmup(message.get("model", "llama3.2:3b"))
             elif action == "ollama_status":
                 response = handle_ollama_status()
+            elif action == "codex_add":
+                response = handle_codex_add(
+                    message.get("id", f"entry_{int(time.time() * 1000)}"),
+                    message.get("title", ""),
+                    message.get("content", ""),
+                    message.get("tags", []),
+                )
+            elif action == "codex_search":
+                response = handle_codex_search(message.get("query", ""), int(message.get("n_results", 3)))
+            elif action == "codex_get_all":
+                response = handle_codex_get_all()
+            elif action == "codex_delete":
+                response = handle_codex_delete(message.get("id", ""))
+            elif action == "codex_clear":
+                response = handle_codex_clear()
+            elif action == "codex_reindex":
+                response = handle_codex_reindex()
+            elif action == "codex_status":
+                response = handle_codex_status()
             elif action == "version":
-                response = {"type": "version", "data": {"version": "0.3.0", "name": "Neo Bridge Host", "features": ["system_metrics", "panic_detector", "sentiment", "sentiment_deep", "ollama_query", "ollama_status", "execute"]}}
+                response = {"type": "version", "data": {"version": "0.4.0", "name": "Neo Bridge Host", "features": ["system_metrics", "panic_detector", "sentiment", "sentiment_deep", "ollama_query", "ollama_status", "execute", "codex_add", "codex_search", "codex_get_all", "codex_delete", "codex_clear", "codex_reindex", "codex_status"]}}
             else:
                 log.warning(f"Unknown action: {action}")
                 response = {"type": "error", "message": f"Action inconnue : '{action}'"}

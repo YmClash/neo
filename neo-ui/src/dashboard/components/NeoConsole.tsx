@@ -6,6 +6,45 @@ import {
   type AIMessage, type AIProvider, type OllamaModel,
 } from '@shared/hooks';
 
+// ─── Proactive Report Banner ───────────────────────────────────────────────
+
+interface ProactiveReport {
+  text: string;
+  ts: number;
+  anomaly: boolean;
+  model?: string;
+  provider?: string;
+}
+
+const ProactiveBanner: React.FC<{
+  report: ProactiveReport;
+  onDismiss: () => void;
+}> = ({ report, onDismiss }) => {
+  const time = new Date(report.ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+      className="mb-3 p-3 rounded-lg"
+      style={{
+        background: report.anomaly ? 'rgba(251,191,36,0.08)' : 'rgba(52,211,153,0.06)',
+        border: `1px solid ${report.anomaly ? 'rgba(251,191,36,0.3)' : 'rgba(52,211,153,0.2)'}`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <p className="text-[9px] font-mono mb-1.5" style={{ color: report.anomaly ? '#fbbf24' : '#34d399' }}>
+            ⏰ Rapport autonome — {time} {report.anomaly ? '⚠ Anomalie détectée' : '✓ Système nominal'}
+          </p>
+          <p className="text-[10px] font-mono text-neo-text leading-relaxed" style={{ whiteSpace: 'pre-wrap' }}>
+            {report.text}
+          </p>
+        </div>
+        <button onClick={onDismiss} className="text-[9px] text-neo-text-dim hover:text-neo-text shrink-0">✕</button>
+      </div>
+    </motion.div>
+  );
+};
+
 // ─── Provider Tab Bar ─────────────────────────────────────────────────────────
 
 const ProviderBar: React.FC<{
@@ -283,11 +322,46 @@ export const NeoConsole: React.FC = () => {
     clearMessages, checkStatus, warmup,
   } = useNeoAI();
 
-  const [input, setInput]       = useState('');
-  const [showKey, setShowKey]   = useState(false);
-  const bottomRef               = useRef<HTMLDivElement>(null);
-  const inputRef                = useRef<HTMLTextAreaElement>(null);
-  const lastMsgCount            = useRef(0);
+  const [input, setInput]             = useState('');
+  const [showKey, setShowKey]         = useState(false);
+  const [proactiveOn, setProactiveOn] = useState(false);
+  const [proactiveReport, setReport]  = useState<ProactiveReport | null>(null);
+  const bottomRef                     = useRef<HTMLDivElement>(null);
+  const inputRef                      = useRef<HTMLTextAreaElement>(null);
+  const lastMsgCount                  = useRef(0);
+
+  // Load proactive state on mount + live sync
+  useEffect(() => {
+    chrome.storage.local.get(['neo_proactive_enabled', 'neo_proactive_last_report'], (result) => {
+      setProactiveOn(result.neo_proactive_enabled ?? false);
+      setReport(result.neo_proactive_last_report ?? null);
+    });
+    const listener = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes.neo_proactive_enabled !== undefined) {
+        setProactiveOn(changes.neo_proactive_enabled.newValue ?? false);
+      }
+      if (changes.neo_proactive_last_report !== undefined) {
+        setReport(changes.neo_proactive_last_report.newValue ?? null);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
+
+  const toggleProactive = useCallback(() => {
+    const next = !proactiveOn;
+    chrome.runtime.sendMessage({
+      type: 'PROACTIVE_TOGGLE', source: 'dashboard', payload: { enabled: next }, timestamp: Date.now(),
+    });
+    setProactiveOn(next);
+  }, [proactiveOn]);
+
+  const dismissReport = useCallback(() => {
+    chrome.runtime.sendMessage({
+      type: 'PROACTIVE_CLEAR_REPORT', source: 'dashboard', payload: {}, timestamp: Date.now(),
+    });
+    setReport(null);
+  }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isThinking]);
 
@@ -331,6 +405,21 @@ export const NeoConsole: React.FC = () => {
           {isThinking && !isWarming && <span className="text-[9px] font-mono text-neo-accent animate-pulse">CALCUL EN COURS...</span>}
         </div>
         <div className="flex items-center gap-2">
+          {/* Proactive toggle */}
+          <button
+            onClick={toggleProactive}
+            title={proactiveOn ? 'Désactiver l\'analyse proactive' : 'Activer l\'analyse proactive (toutes les 15min)'}
+            className="text-[9px] font-mono px-2 py-0.5 rounded transition-all"
+            style={{
+              background: proactiveOn ? 'rgba(52,211,153,0.15)' : 'rgba(99,102,241,0.06)',
+              color: proactiveOn ? '#34d399' : '#8892b0',
+              border: `1px solid ${proactiveOn ? 'rgba(52,211,153,0.4)' : 'rgba(99,102,241,0.2)'}`,
+            }}
+          >
+            {proactiveOn ? '🔔 PROACTIF' : '🔕 PROACTIF'}
+            {proactiveOn && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+          </button>
+
           <button onClick={() => { checkStatus(); if (provider === 'ollama') warmup(); }}
             className="text-[9px] font-mono text-neo-text-dim hover:text-neo-accent transition-colors" title="Vérifier connexion">⟳</button>
           {currentProviderCfg.requiresKey && (
@@ -366,6 +455,13 @@ export const NeoConsole: React.FC = () => {
             onSave={setApiKey}
             onClose={() => setShowKey(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Proactive Report Banner */}
+      <AnimatePresence>
+        {proactiveReport && (
+          <ProactiveBanner report={proactiveReport} onDismiss={dismissReport} />
         )}
       </AnimatePresence>
 
@@ -428,6 +524,21 @@ export const NeoConsole: React.FC = () => {
               {label}
             </button>
           ))}
+          {/* Phase 5 — Proactive + Codex suggestions */}
+          <button
+            onClick={() => {
+              chrome.runtime.sendMessage({ type: 'PROACTIVE_RUN_NOW', source: 'dashboard', payload: {}, timestamp: Date.now() });
+            }}
+            className="text-[9px] font-mono px-2 py-1 rounded transition-all hover:scale-105"
+            style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399' }}>
+            📡 Rapport système
+          </button>
+          <button
+            onClick={() => sendQuery('Qu\'est-ce que tu sais de moi, de mon setup et de mes préférences ? Résume mon profil.')}
+            className="text-[9px] font-mono px-2 py-1 rounded transition-all hover:scale-105"
+            style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: '#818cf8' }}>
+            📚 Que sais-tu de moi ?
+          </button>
         </div>
       )}
 

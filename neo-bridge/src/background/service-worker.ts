@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// Neo Service Worker — The Central Brain v0.3.0 (Phase 4 — AI)
+// Neo Service Worker — The Central Brain v0.4.0 (Phase 5 — Codex + Proactive)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Manages: module lifecycle, message routing, WASM bridge, alarms, notifications,
-//          native messaging polling, panic detection, context buffer, Ollama AI.
-// Manifest V3 — event-driven, stateless between wake-ups.
+//          native messaging polling, panic detection, context buffer,
+//          multi-provider AI (Ollama/Gemini/OpenAI/Claude),
+//          ChromaDB Codex (semantic memory), proactive AI analysis.
 
 import { handleAlarms, registerAlarms } from './alarms';
 import { showNotification } from './notifications';
@@ -33,11 +34,13 @@ interface ContextEvent {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const NATIVE_HOST_NAME = 'com.neo.bridge';
-const METRICS_ALARM = 'neo-metrics-poll';
-const BUFFER_MAX_SIZE = 50;
-const DEFAULT_AI_MODEL = 'llama3.2:3b';
-const DEFAULT_PROVIDER = 'ollama'; // 'ollama' | 'gemini' | 'openai' | 'claude'
+const NATIVE_HOST_NAME    = 'com.neo.bridge';
+const METRICS_ALARM       = 'neo-metrics-poll';
+const PROACTIVE_ALARM     = 'neo-ai-proactive';   // Phase 5
+const BUFFER_MAX_SIZE     = 50;
+const CODEX_MAX_SIMPLE    = 100;                  // chrome.storage Tier-1 hard limit
+const DEFAULT_AI_MODEL    = 'llama3.2:3b';
+const DEFAULT_PROVIDER    = 'ollama';
 
 // ─── Ollama Direct API (fetch — no Native Messaging timeout) ─────────────────
 
@@ -62,9 +65,35 @@ JOURNAL D'ACTIVITÉ :
 DONNÉES WEB RÉCENTES :
 {probe_context}
 
+MÉMOIRE CODEX (souvenirs pertinents) :
+{codex_context}
+
 Réponds en français. Sois proactif — si tu vois un problème dans le contexte, signale-le.`;
 
-function buildSystemPrompt(metrics: Record<string, unknown> | null, events: Array<Record<string, unknown>>): string {
+// Format Codex results into strict XML semantic tags
+// Relevance score (1 - cosine_distance) helps LLMs weight memories appropriately
+function formatCodexContext(
+  results: Array<{ title: string; content: string; distance?: number }>
+): string {
+  if (!results.length) return 'Aucun souvenir pertinent trouvé.';
+  let ctx = '<neo_memory>\n';
+  results.forEach((res, i) => {
+    const relevance = Math.round((1 - (res.distance ?? 0.5)) * 100);
+    ctx += `<memory index="${i + 1}" relevance="${relevance}%">\n`;
+    ctx += `  <title>${res.title}</title>\n`;
+    ctx += `  <content>${res.content}</content>\n`;
+    ctx += `</memory>\n`;
+  });
+  ctx += '</neo_memory>\n';
+  ctx += 'Ces souvenirs te donnent du contexte sur le Docteur. Intègre-les naturellement sans les citer mot pour mot.';
+  return ctx;
+}
+
+function buildSystemPrompt(
+  metrics: Record<string, unknown> | null,
+  events: Array<Record<string, unknown>>,
+  codexResults: Array<{ title: string; content: string; distance?: number }> = []
+): string {
   const sysCtx = metrics
     ? `CPU: ${metrics.cpu_percent}% | RAM: ${metrics.memory_percent}% | Disque: ${metrics.disk_percent}%`
     : 'Métriques non disponibles';
@@ -88,7 +117,8 @@ function buildSystemPrompt(metrics: Record<string, unknown> | null, events: Arra
   return NEO_SYSTEM_PROMPT
     .replace('{system_context}', sysCtx)
     .replace('{activity_context}', actCtx)
-    .replace('{probe_context}', probeCtx);
+    .replace('{probe_context}', probeCtx)
+    .replace('{codex_context}', formatCodexContext(codexResults));
 }
 
 async function ollamaStatus(): Promise<{ available: boolean; models: unknown[] }> {
@@ -257,9 +287,10 @@ async function routeQuery(
   provider: string,
   apiKey: string,
   metrics: Record<string, unknown> | null,
-  events: Array<Record<string, unknown>>
+  events: Array<Record<string, unknown>>,
+  codexResults: Array<{ title: string; content: string; distance?: number }> = []
 ): Promise<{ response: string; eval_count: number; duration_ms: number }> {
-  const system = buildSystemPrompt(metrics, events);
+  const system = buildSystemPrompt(metrics, events, codexResults);
   switch (provider) {
     case 'gemini': return geminiQuery(prompt, model, apiKey, system);
     case 'openai': return openaiQuery(prompt, model, apiKey, system);
@@ -294,6 +325,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       neo_ai_warming: false,
       neo_ai_provider: DEFAULT_PROVIDER,
       neo_ai_keys: { gemini: '', openai: '', claude: '' },
+      // Phase 5 — Codex + Proactive
+      neo_codex_entries: [],
+      neo_codex_chroma_available: false,
+      neo_proactive_enabled: false,
+      neo_proactive_last_report: null,
     });
 
     showNotification(
@@ -311,6 +347,73 @@ chrome.runtime.onStartup.addListener(() => {
   console.log('[Neo SW] 🔄 Browser startup detected.');
   registerAlarms();
 });
+
+// Proactive analysis — runs on PROACTIVE_ALARM (every 15min)
+async function runProactiveAnalysis(): Promise<void> {
+  try {
+    const stored = await chrome.storage.local.get([
+      'neo_proactive_enabled', 'neo_ai_connected', 'neo_ai_provider',
+      'neo_ai_keys', 'neo_ai_model', 'neo_system_metrics', 'neo_context_buffer',
+    ]);
+
+    if (!stored.neo_proactive_enabled || !stored.neo_ai_connected) return;
+
+    const provider = (stored.neo_ai_provider ?? DEFAULT_PROVIDER) as string;
+    const apiKey   = ((stored.neo_ai_keys ?? {}) as Record<string, string>)[provider] ?? '';
+    const model    = (stored.neo_ai_model ?? DEFAULT_AI_MODEL) as string;
+    const metrics  = stored.neo_system_metrics ?? null;
+    const events   = (stored.neo_context_buffer ?? []) as Array<Record<string, unknown>>;
+
+    // Semantic Codex search for proactive context
+    let codexResults: Array<{ title: string; content: string; distance?: number }> = [];
+    try {
+      const cr = await sendNativeMessage({
+        action: 'codex_search', query: 'anomalie critique attention urgence système', n_results: 3,
+      }) as { data?: { results: Array<{ title: string; content: string; distance?: number }> } };
+      codexResults = cr?.data?.results ?? [];
+    } catch { /* bridge offline — proceed without codex */ }
+
+    // Remove standalone system build — routeQuery handles it internally with codexResults
+    const proactivePrompt =
+      `Rapport d'état automatique. Analyse les métriques et l'activité récente. \
+      Réponds avec: 1) Score de santé système /100. 2) Les 2 points les plus critiques (ou "RAS" si tout va bien). \
+      3) Une action recommandée. Sois très concis (max 5 lignes).`;
+
+    const result = await routeQuery(proactivePrompt, model, provider, apiKey, metrics, events, codexResults);
+
+    // Detect anomaly keywords in response
+    const lower = result.response.toLowerCase();
+    const anomaly = ['anomalie', 'critique', 'attention', 'danger', 'surcharge', 'urgent', 'alerte']
+      .some((kw) => lower.includes(kw));
+
+    await chrome.storage.local.set({
+      neo_proactive_last_report: {
+        text: result.response,
+        ts: Date.now(),
+        anomaly,
+        model,
+        provider,
+      },
+    });
+
+    await appendToContextBuffer('proactive_report', {
+      anomaly, score_hint: lower.slice(0, 60), provider, model,
+    });
+
+    if (anomaly) {
+      showNotification(
+        'neo-proactive',
+        '⚡ Neo — Rapport Automatique',
+        `${result.response.slice(0, 150)}...`,
+        'normal'
+      );
+    }
+
+    console.log(`[Neo SW] Proactive analysis done (anomaly=${anomaly})`);
+  } catch (err) {
+    console.warn('[Neo SW] runProactiveAnalysis error:', err);
+  }
+}
 
 // ─── Message Router ───────────────────────────────────────────────────────────
 
@@ -584,16 +687,33 @@ async function handleMessage(
       };
       await chrome.storage.local.set({ neo_ai_thinking: true });
       try {
-        const stored = await chrome.storage.local.get([
-          'neo_system_metrics', 'neo_context_buffer',
-          'neo_ai_provider', 'neo_ai_keys',
+        // Parallel fetch: codex search + storage read (anti-thrashing optimization)
+        // nomic-embed-text loads while chrome.storage is being read — saves ~1-2s
+        const [codexResp, stored] = await Promise.all([
+          sendNativeMessage({
+            action: 'codex_search', query: prompt, n_results: 3,
+          }).catch(() => null),
+          chrome.storage.local.get([
+            'neo_system_metrics', 'neo_context_buffer',
+            'neo_ai_provider', 'neo_ai_keys',
+          ]),
         ]);
+
         const provider = payloadProvider ?? (stored.neo_ai_provider as string | undefined) ?? DEFAULT_PROVIDER;
-        const apiKey = ((stored.neo_ai_keys ?? {}) as Record<string, string>)[provider] ?? '';
+        const apiKey   = ((stored.neo_ai_keys ?? {}) as Record<string, string>)[provider] ?? '';
+        const codexResults = (codexResp as { data?: { results: Array<{ title: string; content: string; distance?: number }> } } | null)
+          ?.data?.results ?? [];
+
+        // Update ChromaDB availability status based on codex response
+        if (codexResp !== null) {
+          await chrome.storage.local.set({ neo_codex_chroma_available: true });
+        }
+
         const result = await routeQuery(
           prompt, model, provider, apiKey,
           stored.neo_system_metrics ?? null,
-          stored.neo_context_buffer ?? []
+          stored.neo_context_buffer ?? [],
+          codexResults
         );
         await appendToContextBuffer('ai_query', { prompt: prompt.slice(0, 100), model, provider, response_length: result.response.length });
         return { success: true, data: { ...result, model, provider }, timestamp: Date.now() };
@@ -602,6 +722,105 @@ async function handleMessage(
       } finally {
         await chrome.storage.local.set({ neo_ai_thinking: false });
       }
+    }
+
+    // ─── Codex (Semantic Memory) ───────────────────────────────
+    case 'CODEX_ADD': {
+      const { id, title, content, tags } = message.payload as {
+        id: string; title: string; content: string; tags?: string[];
+      };
+      // Tier-1: chrome.storage update
+      const stored1 = await chrome.storage.local.get('neo_codex_entries');
+      const entries: unknown[] = stored1.neo_codex_entries || [];
+      const newEntry = { id, title, content, tags: tags ?? [], ts: Date.now() };
+      entries.unshift(newEntry);
+      if (entries.length > CODEX_MAX_SIMPLE) entries.splice(CODEX_MAX_SIMPLE);
+      await chrome.storage.local.set({ neo_codex_entries: entries });
+      // Tier-2: ChromaDB via bridge (async, non-blocking for response)
+      sendNativeMessage({ action: 'codex_add', id, title, content, tags: tags ?? [] }).catch(() => {});
+      return { success: true, data: { id }, timestamp: Date.now() };
+    }
+
+    case 'CODEX_SEARCH': {
+      const { query, n_results } = message.payload as { query: string; n_results?: number };
+      try {
+        const resp = await sendNativeMessage({ action: 'codex_search', query, n_results: n_results ?? 3 });
+        return { success: true, data: (resp as Record<string, unknown>).data, timestamp: Date.now() };
+      } catch {
+        return { success: true, data: { results: [], query, n_results: 0 }, timestamp: Date.now() };
+      }
+    }
+
+    case 'CODEX_GET_ALL': {
+      try {
+        const resp = await sendNativeMessage({ action: 'codex_get_all' });
+        return { success: true, data: (resp as Record<string, unknown>).data, timestamp: Date.now() };
+      } catch {
+        // Fallback to Tier-1
+        const stored2 = await chrome.storage.local.get('neo_codex_entries');
+        return { success: true, data: { entries: stored2.neo_codex_entries ?? [], count: 0, fallback: true }, timestamp: Date.now() };
+      }
+    }
+
+    case 'CODEX_DELETE': {
+      const { id: delId } = message.payload as { id: string };
+      // Tier-1
+      const stored3 = await chrome.storage.local.get('neo_codex_entries');
+      const filtered = ((stored3.neo_codex_entries || []) as Array<{ id: string }>).filter((e) => e.id !== delId);
+      await chrome.storage.local.set({ neo_codex_entries: filtered });
+      // Tier-2
+      sendNativeMessage({ action: 'codex_delete', id: delId }).catch(() => {});
+      return { success: true, data: { id: delId }, timestamp: Date.now() };
+    }
+
+    case 'CODEX_CLEAR': {
+      await chrome.storage.local.set({ neo_codex_entries: [] });
+      sendNativeMessage({ action: 'codex_clear' }).catch(() => {});
+      return { success: true, timestamp: Date.now() };
+    }
+
+    case 'CODEX_STATUS': {
+      try {
+        const resp = await sendNativeMessage({ action: 'codex_status' });
+        const data = (resp as { data: { available: boolean } }).data;
+        await chrome.storage.local.set({ neo_codex_chroma_available: data.available });
+        return { success: true, data, timestamp: Date.now() };
+      } catch {
+        return { success: true, data: { available: false, chroma_installed: false, n_entries: 0 }, timestamp: Date.now() };
+      }
+    }
+
+    case 'CODEX_REINDEX': {
+      try {
+        const resp = await sendNativeMessage({ action: 'codex_reindex' });
+        return { success: true, data: (resp as Record<string, unknown>).data, timestamp: Date.now() };
+      } catch (e) {
+        return { success: false, error: String(e), timestamp: Date.now() };
+      }
+    }
+
+    // ─── Proactive AI ──────────────────────────────────────────
+    case 'PROACTIVE_TOGGLE': {
+      const { enabled } = message.payload as { enabled: boolean };
+      await chrome.storage.local.set({ neo_proactive_enabled: enabled });
+      if (enabled) {
+        // Register/refresh the proactive alarm
+        chrome.alarms.create(PROACTIVE_ALARM, { periodInMinutes: 15 });
+      } else {
+        chrome.alarms.clear(PROACTIVE_ALARM);
+      }
+      return { success: true, data: { enabled }, timestamp: Date.now() };
+    }
+
+    case 'PROACTIVE_RUN_NOW': {
+      // Manual trigger — fire and forget, return immediately
+      runProactiveAnalysis();
+      return { success: true, data: { triggered: true }, timestamp: Date.now() };
+    }
+
+    case 'PROACTIVE_CLEAR_REPORT': {
+      await chrome.storage.local.set({ neo_proactive_last_report: null });
+      return { success: true, timestamp: Date.now() };
     }
 
     // ─── Default ──────────────────────────────────────────────
@@ -619,6 +838,8 @@ async function handleMessage(
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === METRICS_ALARM) {
     await pollSystemMetrics();
+  } else if (alarm.name === PROACTIVE_ALARM) {
+    await runProactiveAnalysis();
   } else {
     handleAlarms(alarm);
   }
