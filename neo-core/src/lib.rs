@@ -11,6 +11,7 @@
 mod crypto;
 mod metrics;
 mod parser;
+mod sandbox;
 
 use wasm_bindgen::prelude::*;
 
@@ -46,6 +47,9 @@ pub use parser::DataParser;
 // Crypto
 pub use crypto::neo_hash;
 pub use crypto::neo_verify;
+
+// Sandbox
+pub use sandbox::neo_run_sandbox;
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 

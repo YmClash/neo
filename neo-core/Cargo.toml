@@ -15,6 +15,9 @@ serde_json = "1"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console"] }
 console_error_panic_hook = "0.1"
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+rustpython = { version = "0.5.0", default-features = false, features = ["stdlib", "freeze-stdlib"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

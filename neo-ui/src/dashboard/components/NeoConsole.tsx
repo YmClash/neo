@@ -224,6 +224,57 @@ const ApiKeyPanel: React.FC<{
   );
 };
 
+// ─── Sandbox Action Card (WASM RustPython) ────────────────────────────────────
+
+const SandboxActionCard: React.FC<{ code: string }> = ({ code }) => {
+  const [running, setRunning] = useState(false);
+  const [output, setOutput]   = useState<string | null>(null);
+  
+  const runCode = async () => {
+    setRunning(true);
+    try {
+      // @ts-ignore
+      const { neo_run_sandbox, default: initWasm } = await import('../../wasm/neo_core.js');
+      await initWasm();
+      
+      const stored = await chrome.storage.local.get('neo_context_buffer');
+      const inputJson = JSON.stringify(stored.neo_context_buffer || []);
+      
+      const result = neo_run_sandbox(code, inputJson);
+      setOutput(result);
+    } catch (err) {
+      setOutput(`Sandbox Error: ${String(err)}`);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 mb-2 rounded-lg overflow-hidden" style={{ border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(0,0,0,0.4)' }}>
+      <div className="flex justify-between items-center px-3 py-1.5" style={{ background: 'rgba(16,185,129,0.1)', borderBottom: '1px solid rgba(16,185,129,0.2)' }}>
+        <span className="text-[9px] font-mono text-emerald-400">🐍 NeoSandbox (WASM)</span>
+        <button 
+          onClick={runCode} 
+          disabled={running}
+          className="text-[9px] font-mono px-2 py-0.5 rounded transition-colors"
+          style={{ background: running ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.8)', color: 'white' }}
+        >
+          {running ? 'Exécution...' : '▶ Run in Sandbox'}
+        </button>
+      </div>
+      <div className="p-3 text-[10px] font-mono text-neo-text overflow-x-auto whitespace-pre">
+        {code}
+      </div>
+      {output && (
+        <div className="p-2" style={{ background: 'rgba(0,0,0,0.6)', borderTop: '1px solid rgba(16,185,129,0.2)' }}>
+          <div className="text-[8px] font-mono text-neo-text-dim mb-1">SORTIE STANDARD :</div>
+          <div className="text-[10px] font-mono text-emerald-300 whitespace-pre-wrap">{output}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
 const PROVIDER_ICON: Record<string, string> = { gemini: '✦', openai: '🤖', claude: '🟣', ollama: '🧬' };
@@ -276,7 +327,27 @@ const MessageBubble: React.FC<{ msg: AIMessage; isNew: boolean }> = ({ msg, isNe
           </details>
         )}
 
-        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{displayed}</div>
+        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {displayed.split(/(```(?:sandbox|python)[\s\S]*?```)/gi).map((part, i) => {
+            if (part.match(/^```(?:sandbox|python)/i) && part.endsWith('```')) {
+              let code = part.replace(/^```(?:sandbox|python)\s*/i, '').slice(0, -3).trim();
+              
+              // Nettoyage agressif des artefacts générés par les petits LLM
+              const varMatch = code.match(/^(?:sandbox\s*)?=\s*(?:"""|''')([\s\S]*?)(?:"""|''')/i);
+              if (varMatch) {
+                code = varMatch[1].trim();
+              } else if (code.toLowerCase().startsWith('sandbox')) {
+                code = code.substring(7).trim();
+              }
+              
+              // Nettoyer les appels exec indésirables
+              code = code.replace(/exec\([^)]*\)/g, '').trim();
+
+              return <SandboxActionCard key={i} code={code} />;
+            }
+            return <span key={i}>{part}</span>;
+          })}
+        </div>
         
         {!isUser && msg.tokens !== undefined && (
           <div className="flex items-center gap-3 mt-1.5 pt-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
