@@ -91,6 +91,18 @@ npm run build:all
 Neo peut mémoriser des informations persistantes sur toi, ton setup et tes préférences.
 Ces souvenirs sont stockés dans **ChromaDB** (base vectorielle locale) et indexés par embeddings `nomic-embed-text`.
 
+## Phase 6 — Web Probes & Analyse Sémantique
+
+- **Web Probes** : Agents d'extraction qui parcourent des pages web (DOM) pour récupérer le contenu textuel brut.
+- **Filtre Cognitif** : Modèle IA dédié (ex: SmolLM2) qui effectue une passe rapide sur les données extraites pour identifier le thème, les entités et attribuer un score de pertinence.
+- Enregistrement automatique dans la base de données vectorielle (Codex) si le score de pertinence est élevé.
+
+## Phase 7 — NeoSandbox (RustPython WASM)
+
+- **Machine Virtuelle Embarquée** : Moteur RustPython compilé en WebAssembly, tournant directement dans le processus de l'extension Chrome (zéro appel serveur).
+- **Isolation Totale** : Pas d'accès au système de fichiers ni aux API hôtes, permettant d'exécuter du code généré par l'IA en toute sécurité (Zone de Quarantaine).
+- **Workflow Human-in-the-loop** : Neo génère le script Python, et l'utilisateur l'exécute d'un clic via l'interface (`<SandboxActionCard />`).
+
 **Flux lors d'une requête AI :**
 ```
 Message utilisateur → SW → codex_search (sémantique) → Top-3 résultats
